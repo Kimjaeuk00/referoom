@@ -1,0 +1,82 @@
+docs/
+
+# ----- 비밀 값 (절대 올리지 않음) -----
+# 실제 API 키·비밀번호가 들어 있는 파일
+.env
+.env.*
+*.env
+**/.env
+**/.env.*
+# 단, 변수 이름만 적은 예시 파일은 올린다 (각 서비스 폴더의 것 포함)
+!.env.example
+!**/.env.example
+
+# ----- 파이썬 (rag-service, voice-service, common-py) -----
+.venv/
+venv/
+**/.venv/
+**/venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ----- 벡터 DB·모델 캐시 (실행하면 다시 생기는 큰 파일) -----
+faiss_db/
+**/faiss_db/
+*.faiss
+.cache/
+hfcache/
+**/huggingface/
+
+# ----- 사용자 데이터·음성 파일 (개인정보 가능, 올리지 않음) -----
+uploads/
+**/uploads/
+voice-service/data/
+*.webm
+*.wav
+*.mp3
+
+# ----- 시드 논문 PDF (용량·라이선스: 목록만 올리고 파일은 올리지 않음) -----
+data/seed/*.pdf
+data/seed/**/*.pdf
+
+# ----- Java / Gradle (auth-server) -----
+.gradle/
+**/.gradle/
+auth-server/**/build/
+auth-server/**/bin/
+*.class
+*.jar
+# Gradle 래퍼는 프로젝트가 직접 쓰므로 올린다
+!auth-server/gradle/wrapper/gradle-wrapper.jar
+
+# ----- 프론트엔드 (frontend) -----
+node_modules/
+**/node_modules/
+frontend/dist/
+frontend/.vite/
+*.local
+
+# ----- 로그 -----
+*.log
+logs/
+
+# ----- 편집기·운영체제 -----
+.DS_Store
+**/.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.iml
+*.swp
+*~
+
+# ----- 참고: 일부러 올리는 것 -----
+# eval/results/  : 평가 결과표(제출물·발표 근거)라서 올립니다
+# eval/questions/: 평가 질문이라서 올립니다
+# db/migrations/ : DB 스키마 SQL이라서 올립니다
+# .gitkeep       : 빈 폴더를 유지하는 빈 파일이라서 올립니다
