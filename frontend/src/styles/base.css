@@ -1,0 +1,515 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--c-paper);
+  color: var(--c-ink);
+  font-family: var(--font);
+  font-size: var(--fs-md);
+  line-height: var(--lh);
+  font-optical-sizing: auto; /* 큰 글자는 Inter Display 모양으로 */
+  -webkit-font-smoothing: antialiased;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+  line-height: var(--lh-tight);
+}
+
+/* 큰 제목: 시안처럼 고전 세리프, 너무 굵지 않게 */
+h1,
+h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* 작은 구역 이름: Vorb의 "Quick action cards"처럼 평범한 작은 회색 글자 */
+.section-label {
+  font-family: var(--font);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--c-ink-muted);
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--c-accent);
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  color: var(--c-accent-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--c-accent-2);
+  outline-offset: 2px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+legend {
+  padding: 0;
+}
+
+/* 버튼 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-s); /* 시안처럼 살짝 둥근 네모 */
+  background: var(--c-surface);
+  color: var(--c-ink);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--c-rule);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--c-accent);
+  color: var(--c-on-accent);
+}
+
+/* onlines 머리말의 "Hablemos" 같은 작은 검정 알약 */
+.btn-dark {
+  background: var(--c-black);
+  color: var(--c-on-black);
+}
+
+.btn-dark:hover:not(:disabled) {
+  background: var(--c-accent-ink);
+}
+
+/* 보조 버튼: 옅은 세이지 알약 */
+.btn-soft {
+  background: var(--grad-soft);
+  color: var(--c-ink);
+}
+
+.btn-soft:hover:not(:disabled) {
+  background: var(--grad-soft);
+  filter: brightness(0.97);
+}
+
+/* 가는 테두리 버튼(시안의 머리말 "Записатись") */
+.btn-line {
+  border: 1px solid var(--c-rule-strong);
+  background: var(--c-paper);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--c-accent-ink);
+}
+
+.btn-quiet {
+  background: transparent;
+  color: var(--c-accent);
+  padding: 0 8px;
+}
+
+.btn-quiet:hover:not(:disabled) {
+  background: transparent;
+  text-decoration: underline;
+}
+
+.btn-danger {
+  background: var(--c-danger-wash);
+  color: var(--c-danger);
+}
+
+/* 입력 */
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.label {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+
+.hint {
+  font-size: var(--fs-xs);
+  color: var(--c-ink-muted);
+  line-height: 1.5;
+}
+
+.input {
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 12px;
+  border: 1px solid var(--c-rule-strong);
+  border-radius: var(--radius-m);
+  background: var(--c-paper);
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--c-accent-2);
+  outline-offset: 0;
+  border-color: var(--c-accent-2);
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--c-danger);
+}
+
+.field-error {
+  color: var(--c-danger);
+  font-size: var(--fs-xs);
+}
+
+/* 두세 개 중 하나를 고르는 버튼 묶음: 회색 알약 안에서 고른 것만 검정 알약 */
+.segmented {
+  display: inline-flex;
+  width: fit-content;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 999px;
+  background: var(--c-surface);
+}
+
+.segmented button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-ink);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.segmented button[aria-pressed="true"] {
+  background: var(--c-black);
+  color: var(--c-on-black);
+  font-weight: 600;
+}
+
+.segmented button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 출처 표시·태그 색. 출처는 S 번호 순서로, 태그는 이름으로 네 가지 중 하나를 고른다 */
+.tone-0, [data-tone="0"] { --tone-fill: var(--tone0-fill); --tone-line: var(--tone0-line); --tone-ink: var(--tone0-ink); }
+.tone-1, [data-tone="1"] { --tone-fill: var(--tone1-fill); --tone-line: var(--tone1-line); --tone-ink: var(--tone1-ink); }
+.tone-2, [data-tone="2"] { --tone-fill: var(--tone2-fill); --tone-line: var(--tone2-line); --tone-ink: var(--tone2-ink); }
+.tone-3, [data-tone="3"] { --tone-fill: var(--tone3-fill); --tone-line: var(--tone3-line); --tone-ink: var(--tone3-ink); }
+
+/* 답변 본문의 출처 표시와 태그: 시안의 색 알약 */
+.cite,
+.ref,
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid var(--tone-line, var(--c-rule-strong));
+  border-radius: 999px;
+  background: var(--tone-fill, var(--c-surface));
+  color: var(--tone-ink, var(--c-ink));
+  font-family: var(--font);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.cite {
+  margin: 0 2px;
+  vertical-align: 0.1em;
+  cursor: pointer;
+}
+
+.cite:hover {
+  border-color: var(--tone-ink, var(--c-ink));
+}
+
+/* 상태 표시 */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status.indexed {
+  color: var(--c-ok);
+}
+
+.status.pending {
+  color: var(--c-review);
+}
+
+.status.failed {
+  color: var(--c-danger);
+}
+
+.tag {
+  display: inline-block;
+  margin: 0 4px 4px 0;
+  padding: 0 8px;
+  border: 1px solid var(--tone-line, var(--c-rule-strong));
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  color: var(--tone-ink, var(--c-ink));
+  background: var(--tone-fill, var(--c-surface));
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 불러오는 중 자리표시 줄 */
+.skeleton {
+  display: grid;
+  gap: 10px;
+}
+
+.skeleton span {
+  display: block;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--c-rule);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton span:nth-child(2) {
+  width: 92%;
+}
+
+.skeleton span:nth-child(3) {
+  width: 64%;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+dialog {
+  width: min(680px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  border: 1px solid var(--c-rule-strong);
+  border-radius: var(--radius-l);
+  background: var(--c-paper);
+  color: var(--c-ink);
+}
+
+dialog::backdrop {
+  background: var(--c-scrim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 데이터 표: 테두리 하나로 감싸고 머리글만 회색 (라이브러리·근거 표) */
+.table-frame {
+  border: 1px solid var(--c-rule);
+  border-radius: var(--radius-l);
+  overflow-x: auto;
+  background: var(--c-paper);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.data-table th {
+  padding: 9px 12px;
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-rule);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--c-ink-muted);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--c-rule);
+  vertical-align: top;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.data-table .num {
+  text-align: right;
+}
+
+/* 아이콘만 있는 버튼 */
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-m);
+  background: transparent;
+  color: var(--c-ink);
+  cursor: pointer;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: var(--c-surface);
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 답변 아래 안내 상자: 주황은 원문 확인 권장, 회청은 근거·안내 */
+.callout {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--c-rule-strong);
+  border-radius: var(--radius-l);
+  font-size: var(--fs-sm);
+}
+
+.callout > svg {
+  margin-top: 1px;
+}
+
+.callout.warn {
+  border-color: var(--c-review-line);
+  background: var(--c-review-wash);
+}
+
+.callout.warn > svg {
+  color: var(--c-review);
+}
+
+.callout.info > svg,
+.callout.warn > svg {
+  stroke-width: 2;
+}
+
+.callout.info {
+  border-color: var(--c-info-line);
+  background: var(--c-info-wash);
+}
+
+/* Vorb의 반투명 카드 */
+.glass {
+  border: 1px solid var(--c-glass-line);
+  background: var(--c-glass);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.callout.info > svg {
+  color: var(--tone1-ink);
+}
+
+.callout-title {
+  font-weight: 600;
+}
+
+/* 첫 화면(로그인·홈) 바탕: Vorb처럼 위는 코랄, 아래로 갈수록 얼음빛 파랑 */
+.glow-bg {
+  background:
+    var(--bg-glow);
+}
+
+/* 첫 화면의 큰 인사말: 세리프 */
+.greeting {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(2rem, 4.2vw, 3rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--c-ink);
+}
+
+/* 시안의 "the psychologist"처럼 강조 낱말만 세이지 초록 */
+.grad-word {
+  background: var(--grad-word);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
