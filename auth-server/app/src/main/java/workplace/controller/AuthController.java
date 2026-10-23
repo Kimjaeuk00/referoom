@@ -4,7 +4,6 @@ import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -104,12 +103,9 @@ public class AuthController {
     @GetMapping("/auth/check")
     @Operation(
         summary = "인증 상태 확인",
-        description = "Bearer 헤더를 우선 검증하고, 헤더가 없으면 ACCESS_TOKEN 쿠키를 검증합니다."
+        description = "Swagger에서는 Bearer 인증을 사용합니다. Authorization 헤더가 없으면 기존 ACCESS_TOKEN 쿠키도 검증합니다."
     )
-    @SecurityRequirements({
-        @SecurityRequirement(name = "bearerAuth"),
-        @SecurityRequirement(name = "cookieAuth")
-    })
+    @SecurityRequirement(name = "bearerAuth")
     public AuthCheckResDTO checkAuth(
         @Parameter(hidden = true)
         @AuthenticationPrincipal CustomPrincipal principal

@@ -100,6 +100,11 @@ public class User {
     )
     private LocalDateTime updatedAt;
 
+    public void joinTeam(Team team) {
+        this.team = team;
+        this.role = Role.member;
+    }
+
     public void updateProfile(
         SkillLevel skillLevel,
         ViewType viewPref

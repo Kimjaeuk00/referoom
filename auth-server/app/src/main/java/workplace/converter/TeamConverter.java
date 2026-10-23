@@ -1,8 +1,9 @@
 package workplace.converter;
 
+import workplace.dto.res.TeamResDTO;
+import workplace.dto.res.UserResDTO;
 import workplace.entity.Team;
 import workplace.enums.TeamType;
-import workplace.dto.res.UserResDTO;
 
 public final class TeamConverter {
 
@@ -22,14 +23,33 @@ public final class TeamConverter {
     }
 
     public static UserResDTO.TeamInfo toTeamInfoDTO(Team team) {
-    if (team == null) {
-        return null;
+        if (team == null) {
+            return null;
+        }
+
+        return UserResDTO.TeamInfo.builder()
+            .id(team.getId())
+            .name(team.getName())
+            .type(team.getTeamType())
+            .build();
     }
 
-    return UserResDTO.TeamInfo.builder()
-        .id(team.getId())
-        .name(team.getName())
-        .type(team.getTeamType())
-        .build();
-}
+    public static TeamResDTO toTeamResDTO(
+        Team team,
+        long memberCount,
+        String inviteCode
+    ) {
+        TeamResDTO.TeamInfo teamInfo =
+            TeamResDTO.TeamInfo.builder()
+                .id(team.getId())
+                .name(team.getName())
+                .type(team.getTeamType())
+                .memberCount(memberCount)
+                .inviteCode(inviteCode)
+                .build();
+
+        return TeamResDTO.builder()
+            .team(teamInfo)
+            .build();
+    }
 }
