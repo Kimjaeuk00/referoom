@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import workplace.dto.req.JoinTeamReqDTO;
+import workplace.dto.res.TeamMembersResDTO;
 import workplace.dto.res.TeamResDTO;
 import workplace.dto.res.TokenUserResDTO;
 import workplace.security.AuthCookieManager;
@@ -66,5 +67,19 @@ public class TeamController {
         );
 
         return result;
+    }
+
+    @GetMapping("/members")
+    @Operation(summary = "내 팀원 목록 조회 — 관리자 전용")
+    @SecurityRequirement(name = "bearerAuth")
+    public TeamMembersResDTO getTeamMembers(
+        @Parameter(hidden = true)
+        @AuthenticationPrincipal CustomPrincipal principal
+    ) {
+        return teamService.getTeamMembers(
+            principal.userId(),
+            principal.teamId(),
+            principal.role()
+        );
     }
 }

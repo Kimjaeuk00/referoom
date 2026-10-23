@@ -1,6 +1,7 @@
 package workplace.service;
 
 import java.security.SecureRandom;
+import java.util.List;
 import java.util.Locale;
 
 import lombok.RequiredArgsConstructor;
@@ -9,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import workplace.converter.TeamConverter;
 import workplace.converter.UserConverter;
 import workplace.dto.req.JoinTeamReqDTO;
+import workplace.dto.res.TeamMembersResDTO;
 import workplace.dto.res.TeamResDTO;
 import workplace.dto.res.TokenUserResDTO;
 import workplace.entity.Team;
@@ -134,6 +136,50 @@ public class TeamService {
         return UserConverter.toTokenUserResDTO(
             user,
             accessToken
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public TeamMembersResDTO getTeamMembers(
+        Long userId,
+        Long jwtTeamId,
+        Role jwtRole
+    ) {
+        User user = userRepository.findWithTeamById(userId)
+            .orElseThrow(
+                () -> new ApiException(
+                    ErrorCode.UNAUTHORIZED
+                )
+            );
+
+        Team team = user.getTeam();
+
+        if (jwtTeamId == null || team == null) {
+            throw new ApiException(
+                ErrorCode.NO_TEAM
+            );
+        }
+
+        if (!jwtTeamId.equals(team.getId())) {
+            throw new ApiException(
+                ErrorCode.FORBIDDEN
+            );
+        }
+
+        if (jwtRole != Role.team_admin
+                || user.getRole() != Role.team_admin) {
+            throw new ApiException(
+                ErrorCode.FORBIDDEN
+            );
+        }
+
+        List<User> members =
+            userRepository.findAllByTeam_IdOrderByIdAsc(
+                jwtTeamId
+            );
+
+        return TeamConverter.toTeamMembersResDTO(
+            members
         );
     }
 

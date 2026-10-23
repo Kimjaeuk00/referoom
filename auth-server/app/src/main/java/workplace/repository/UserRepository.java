@@ -1,5 +1,6 @@
 package workplace.repository;
 
+import java.util.List;
 import java.util.Optional;
 
 import jakarta.persistence.LockModeType;
@@ -21,6 +22,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findWithTeamById(Long id);
 
     long countByTeam_Id(Long teamId);
+
+    @EntityGraph(attributePaths = "team")
+    List<User> findAllByTeam_IdOrderByIdAsc(Long teamId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.id = :userId")
