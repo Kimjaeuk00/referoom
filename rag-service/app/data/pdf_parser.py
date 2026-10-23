@@ -4,7 +4,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Literal
 
-from pypdf import PdfReader
+import pymupdf
 
 
 PageTexts = list[tuple[int, str]]
@@ -33,13 +33,19 @@ class ParseResult:
     error_msg: str | None = None
 
 
-def extract_pages(file_path: str) -> PageTexts:
-    """빈 페이지도 포함하여 [(page_no, text)]로 추출합니다. OCR은 수행하지 않습니다."""
-    reader = PdfReader(file_path)
-    return [
-        (page_no, page.extract_text() or "")
-        for page_no, page in enumerate(reader.pages, start=1)
-    ]
+def extract_pages(file_path: str | bytes) -> PageTexts:
+    """파일 경로 또는 PDF bytes에서 추출합니다. 빈 페이지를 포함하며 OCR은 수행하지 않습니다."""
+    # bytes 입력은 디스크에 저장하지 않고 메모리에서 직접 엽니다.
+    document = (
+        pymupdf.open(stream=file_path, filetype="pdf")
+        if isinstance(file_path, bytes)
+        else pymupdf.open(file_path)
+    )
+    with document:
+        return [
+            (page_no, page.get_text("text") or "")
+            for page_no, page in enumerate(document, start=1)
+        ]
 
 
 def _normalize_line(line: str) -> str:
@@ -133,11 +139,11 @@ def has_math(text: str, min_markers: int = 3) -> bool:
     return len(markers) >= min_markers
 
 
-def load_paper(file_path: str) -> ParseResult:
-    """페이지별 본문과 색인에서 제외할 참고문헌을 분리합니다.
+def load_paper(file_path: str | bytes) -> ParseResult:
+    """파일 경로 또는 PDF bytes를 받아 본문과 참고문헌을 분리합니다.
 
-    pypdf의 다단 문장 순서와 수식 추출에는 한계가 있습니다.
-    실제 2단 시드 논문 3편을 확인한 뒤 추출기 교체 여부를 결정해야 합니다.
+    PyMuPDF를 실험용으로 사용하며, 다단 문장 순서와 수식 추출 품질은
+    실제 2단 시드 논문 3편으로 비교한 뒤 정식 채택 여부를 결정합니다.
     """
     try:
         pages = extract_pages(file_path)
@@ -152,3 +158,6 @@ def load_paper(file_path: str) -> ParseResult:
     cleaned_pages = _remove_page_noise(pages)
     body, references = _split_references(cleaned_pages)
     return ParseResult(status="completed", pages=body, references=references)
+
+
+
