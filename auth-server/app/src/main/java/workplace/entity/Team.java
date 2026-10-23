@@ -63,4 +63,8 @@ public class Team {
             "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
     )
     private LocalDateTime updatedAt;
+
+    public void changeInviteCode(String inviteCode) {
+        this.inviteCode = inviteCode;
+    }
 }

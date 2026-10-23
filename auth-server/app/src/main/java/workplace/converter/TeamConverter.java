@@ -2,6 +2,7 @@ package workplace.converter;
 
 import java.util.List;
 
+import workplace.dto.res.InviteCodeResDTO;
 import workplace.dto.res.TeamMembersResDTO;
 import workplace.dto.res.TeamResDTO;
 import workplace.dto.res.UserResDTO;
@@ -80,6 +81,15 @@ public final class TeamConverter {
             .role(user.getRole())
             .level(user.getSkillLevel())
             .view(user.getEffectiveView())
+            .build();
+    }
+
+    public static InviteCodeResDTO toInviteCodeResDTO(
+        String inviteCode
+    ) {
+        return InviteCodeResDTO.builder()
+            .ok(true)
+            .inviteCode(inviteCode)
             .build();
     }
 }

@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import workplace.converter.TeamConverter;
 import workplace.converter.UserConverter;
 import workplace.dto.req.JoinTeamReqDTO;
+import workplace.dto.res.InviteCodeResDTO;
 import workplace.dto.res.TeamMembersResDTO;
 import workplace.dto.res.TeamResDTO;
 import workplace.dto.res.TokenUserResDTO;
@@ -180,6 +181,58 @@ public class TeamService {
 
         return TeamConverter.toTeamMembersResDTO(
             members
+        );
+    }
+
+    @Transactional
+    public InviteCodeResDTO rotateInviteCode(
+        Long userId,
+        Long jwtTeamId,
+        Role jwtRole
+    ) {
+        User user = userRepository.findByIdForUpdate(userId)
+            .orElseThrow(
+                () -> new ApiException(
+                    ErrorCode.UNAUTHORIZED
+                )
+            );
+
+        Team currentTeam = user.getTeam();
+
+        if (jwtTeamId == null || currentTeam == null) {
+            throw new ApiException(
+                ErrorCode.NO_TEAM
+            );
+        }
+
+        if (!jwtTeamId.equals(currentTeam.getId())) {
+            throw new ApiException(
+                ErrorCode.FORBIDDEN
+            );
+        }
+
+        if (jwtRole != Role.team_admin
+                || user.getRole() != Role.team_admin) {
+            throw new ApiException(
+                ErrorCode.FORBIDDEN
+            );
+        }
+
+        Team team = teamRepository.findByIdForUpdate(jwtTeamId)
+            .orElseThrow(
+                () -> new ApiException(
+                    ErrorCode.FORBIDDEN
+                )
+            );
+
+        String newInviteCode = generateInviteCode();
+
+        team.changeInviteCode(newInviteCode);
+
+        teamRepository.flush();
+
+        return TeamConverter.toInviteCodeResDTO(
+            newInviteCode
         );
     }
 

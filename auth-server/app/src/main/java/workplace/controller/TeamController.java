@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import workplace.dto.req.JoinTeamReqDTO;
+import workplace.dto.res.InviteCodeResDTO;
 import workplace.dto.res.TeamMembersResDTO;
 import workplace.dto.res.TeamResDTO;
 import workplace.dto.res.TokenUserResDTO;
@@ -77,6 +78,20 @@ public class TeamController {
         @AuthenticationPrincipal CustomPrincipal principal
     ) {
         return teamService.getTeamMembers(
+            principal.userId(),
+            principal.teamId(),
+            principal.role()
+        );
+    }
+
+    @PostMapping("/invite-code/rotate")
+    @Operation(summary = "팀 초대 코드 재발급 — 관리자 전용")
+    @SecurityRequirement(name = "bearerAuth")
+    public InviteCodeResDTO rotateInviteCode(
+        @Parameter(hidden = true)
+        @AuthenticationPrincipal CustomPrincipal principal
+    ) {
+        return teamService.rotateInviteCode(
             principal.userId(),
             principal.teamId(),
             principal.role()
