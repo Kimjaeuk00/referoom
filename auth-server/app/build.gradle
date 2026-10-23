@@ -16,32 +16,48 @@ repositories {
 }
 
 dependencies {
-    // Spring Boot 관련 라이브러리 버전 관리
+    // Spring Boot 의존성 버전 관리
     implementation platform(
         'org.springframework.boot:spring-boot-dependencies:4.0.8'
     )
 
-    // REST API 서버
+    // Lombok 처리에 사용하는 의존성도 동일한 버전 기준 적용
+    annotationProcessor platform(
+        'org.springframework.boot:spring-boot-dependencies:4.0.8'
+    )
+
+    // REST API
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 
     // 요청 데이터 검증
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
-    // 기존 코드에서 사용하는 라이브러리 유지
-    implementation 'org.mariadb.jdbc:mariadb-java-client:3.5.6'
-    implementation 'com.auth0:java-jwt:4.4.0'
-    implementation 'org.mindrot:jbcrypt:0.4'
-
     // JPA · Hibernate · DB 연결 풀
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+    // MariaDB JDBC 드라이버
+    implementation 'org.mariadb.jdbc:mariadb-java-client:3.5.6'
+
+    // JWT 발급 및 검증
+    implementation 'com.auth0:java-jwt:4.4.0'
+
+    // 비밀번호 BCrypt 암호화
+    implementation 'org.mindrot:jbcrypt:0.4'
+
+    // Lombok: getter·생성자 등 자동 생성
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // Swagger UI 및 OpenAPI 명세 자동 생성
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
 }
 
-// 기존 main 클래스들과 구분해 Spring Boot 시작 클래스 지정
+// Spring Boot 실행 클래스
 springBoot {
     mainClass = 'workplace.AuthServerApplication'
 }
 
-// 기존 DB 예제 실행 작업 유지
+// 기존 DB 예제 개별 실행 작업 유지
 tasks.register('runDbExample', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'workplace.DbExample'
