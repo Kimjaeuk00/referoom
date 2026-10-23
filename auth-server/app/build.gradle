@@ -29,6 +29,9 @@ dependencies {
     // REST API
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 
+    // JWT 기반 API 인증 및 접근 제어
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+
     // 요청 데이터 검증
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 

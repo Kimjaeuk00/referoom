@@ -12,4 +12,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @EntityGraph(attributePaths = "team")
     Optional<User> findByUsername(String username);
+
+    @EntityGraph(attributePaths = "team")
+    Optional<User> findWithTeamById(Long id);
 }

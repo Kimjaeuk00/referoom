@@ -1,13 +1,14 @@
 package workplace.converter;
 
 import workplace.dto.req.SignupReqDTO;
+import workplace.dto.res.LoginResDTO;
+import workplace.dto.res.MeResDTO;
 import workplace.dto.res.SignupResDTO;
+import workplace.dto.res.UserResDTO;
 import workplace.entity.Team;
 import workplace.entity.User;
 import workplace.enums.Role;
 import workplace.enums.SkillLevel;
-import workplace.dto.res.LoginResDTO;
-import workplace.dto.res.UserResDTO;
 
 public final class UserConverter {
 
@@ -51,16 +52,16 @@ public final class UserConverter {
     }
 
     public static UserResDTO toUserResDTO(User user) {
-    return UserResDTO.builder()
-        .id(user.getId())
-        .username(user.getUsername())
-        .displayName(user.getDisplayName())
-        .role(user.getRole())
-        .level(user.getSkillLevel())
-        .view(user.getEffectiveView())
-        .team(TeamConverter.toTeamInfoDTO(user.getTeam()))
-        .build();
-}
+        return UserResDTO.builder()
+            .id(user.getId())
+            .username(user.getUsername())
+            .displayName(user.getDisplayName())
+            .role(user.getRole())
+            .level(user.getSkillLevel())
+            .view(user.getEffectiveView())
+            .team(TeamConverter.toTeamInfoDTO(user.getTeam()))
+            .build();
+    }
 
     public static LoginResDTO toLoginResDTO(
         User user,
@@ -72,6 +73,12 @@ public final class UserConverter {
             .accessToken(accessToken)
             .tokenType("Bearer")
             .expiresIn(expiresIn)
+            .user(toUserResDTO(user))
+            .build();
+    }
+
+    public static MeResDTO toMeResDTO(User user) {
+        return MeResDTO.builder()
             .user(toUserResDTO(user))
             .build();
     }
