@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import workplace.converter.UserConverter;
 import workplace.dto.req.SignupReqDTO;
+import workplace.dto.res.AuthCheckResDTO;
 import workplace.dto.res.SignupResDTO;
 import workplace.entity.Team;
 import workplace.entity.User;
@@ -173,5 +174,17 @@ public class AuthService {
             accessToken,
             jwtTokenProvider.getExpirationSeconds()
         );
+    }
+
+    @Transactional(readOnly = true)
+    public AuthCheckResDTO checkAuth(Long userId) {
+        User user = userRepository.findById(userId)
+            .orElseThrow(
+                () -> new ApiException(
+                    ErrorCode.UNAUTHORIZED
+                )
+            );
+
+        return UserConverter.toAuthCheckResDTO(user);
     }
 }

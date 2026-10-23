@@ -7,6 +7,7 @@ import java.util.Set;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,9 @@ import workplace.exception.ApiException;
 
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private static final String AUTH_CHECK_PATH = "/api/auth/check";
+    private static final String ACCESS_TOKEN_COOKIE = "ACCESS_TOKEN";
 
     private static final Set<String> PUBLIC_API_PATHS = Set.of(
         "/api/signup",
@@ -47,46 +51,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         FilterChain filterChain
     ) throws ServletException, IOException {
 
-        String authorization = request.getHeader(
-            HttpHeaders.AUTHORIZATION
-        );
-
-        if (authorization == null) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
         try {
-            String[] parts = authorization.strip().split("\\s+", 2);
+            String accessToken = resolveToken(request);
 
-            if (parts.length != 2
-                || !"Bearer".equalsIgnoreCase(parts[0])
-                || parts[1].isBlank()) {
-                throw new ApiException(ErrorCode.UNAUTHORIZED);
+            if (accessToken != null) {
+                authenticate(accessToken);
             }
-
-            CustomPrincipal principal = jwtTokenProvider.verifyToken(
-                parts[1]
-            );
-
-            SimpleGrantedAuthority authority =
-                new SimpleGrantedAuthority(
-                    "ROLE_" + principal.role()
-                        .name()
-                        .toUpperCase(Locale.ROOT)
-                );
-
-            var authentication =
-                UsernamePasswordAuthenticationToken.authenticated(
-                    principal,
-                    null,
-                    List.of(authority)
-                );
-
-            var context = SecurityContextHolder.createEmptyContext();
-            context.setAuthentication(authentication);
-
-            SecurityContextHolder.setContext(context);
         } catch (ApiException exception) {
             SecurityContextHolder.clearContext();
 
@@ -106,5 +76,79 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private String resolveToken(HttpServletRequest request) {
+        String authorization = request.getHeader(
+            HttpHeaders.AUTHORIZATION
+        );
+
+        // Authorization 헤더가 있으면 반드시 해당 값을 사용
+        if (authorization != null) {
+            String[] parts = authorization.strip().split("\\s+", 2);
+
+            if (parts.length != 2
+                || !"Bearer".equalsIgnoreCase(parts[0])
+                || parts[1].isBlank()) {
+                throw new ApiException(
+                    ErrorCode.UNAUTHORIZED
+                );
+            }
+
+            return parts[1];
+        }
+
+        // 쿠키 인증은 GET /api/auth/check에만 허용
+        if (!"GET".equals(request.getMethod())
+            || !AUTH_CHECK_PATH.equals(request.getServletPath())) {
+            return null;
+        }
+
+        Cookie[] cookies = request.getCookies();
+
+        if (cookies == null) {
+            return null;
+        }
+
+        for (Cookie cookie : cookies) {
+            if (ACCESS_TOKEN_COOKIE.equals(cookie.getName())) {
+                String value = cookie.getValue();
+
+                if (value == null || value.isBlank()) {
+                    throw new ApiException(
+                        ErrorCode.UNAUTHORIZED
+                    );
+                }
+
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    private void authenticate(String accessToken) {
+        CustomPrincipal principal = jwtTokenProvider.verifyToken(
+            accessToken
+        );
+
+        SimpleGrantedAuthority authority =
+            new SimpleGrantedAuthority(
+                "ROLE_" + principal.role()
+                    .name()
+                    .toUpperCase(Locale.ROOT)
+            );
+
+        var authentication =
+            UsernamePasswordAuthenticationToken.authenticated(
+                principal,
+                null,
+                List.of(authority)
+            );
+
+        var context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(authentication);
+
+        SecurityContextHolder.setContext(context);
     }
 }

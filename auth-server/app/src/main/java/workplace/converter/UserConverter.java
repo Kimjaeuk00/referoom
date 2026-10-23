@@ -1,6 +1,7 @@
 package workplace.converter;
 
 import workplace.dto.req.SignupReqDTO;
+import workplace.dto.res.AuthCheckResDTO;
 import workplace.dto.res.LoginResDTO;
 import workplace.dto.res.MeResDTO;
 import workplace.dto.res.SignupResDTO;
@@ -92,6 +93,15 @@ public final class UserConverter {
     public static MeResDTO toMeResDTO(User user) {
         return MeResDTO.builder()
             .user(toUserResDTO(user))
+            .build();
+    }
+
+    public static AuthCheckResDTO toAuthCheckResDTO(User user) {
+        return AuthCheckResDTO.builder()
+            .ok(true)
+            .via("jwt")
+            .username(user.getUsername())
+            .sub(user.getId().toString())
             .build();
     }
 }

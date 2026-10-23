@@ -2,6 +2,9 @@ package workplace.controller;
 
 import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -9,12 +12,15 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import workplace.dto.req.LoginReqDTO;
 import workplace.dto.req.SignupReqDTO;
+import workplace.dto.res.AuthCheckResDTO;
 import workplace.dto.res.LoginResDTO;
 import workplace.dto.res.SignupResDTO;
 import workplace.security.AuthCookieManager;
+import workplace.security.CustomPrincipal;
 import workplace.service.AuthService;
 
 @RestController
@@ -87,5 +93,21 @@ public class AuthController {
             servletRequest,
             servletResponse
         );
+    }
+
+    @GetMapping("/auth/check")
+    @Operation(
+        summary = "인증 상태 확인",
+        description = "Bearer 헤더를 우선 검증하고, 헤더가 없으면 ACCESS_TOKEN 쿠키를 검증합니다."
+    )
+    @SecurityRequirements({
+        @SecurityRequirement(name = "bearerAuth"),
+        @SecurityRequirement(name = "cookieAuth")
+    })
+    public AuthCheckResDTO checkAuth(
+        @Parameter(hidden = true)
+        @AuthenticationPrincipal CustomPrincipal principal
+    ) {
+        return authService.checkAuth(principal.userId());
     }
 }
