@@ -100,6 +100,19 @@ public class User {
     )
     private LocalDateTime updatedAt;
 
+    public void updateProfile(
+        SkillLevel skillLevel,
+        ViewType viewPref
+    ) {
+        if (skillLevel != null) {
+            this.skillLevel = skillLevel;
+        }
+
+        if (viewPref != null) {
+            this.viewPref = viewPref;
+        }
+    }
+
     public ViewType getEffectiveView() {
     if (viewPref != null) {
         return viewPref;

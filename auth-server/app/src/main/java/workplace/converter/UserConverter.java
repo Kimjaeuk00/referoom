@@ -4,6 +4,7 @@ import workplace.dto.req.SignupReqDTO;
 import workplace.dto.res.LoginResDTO;
 import workplace.dto.res.MeResDTO;
 import workplace.dto.res.SignupResDTO;
+import workplace.dto.res.TokenUserResDTO;
 import workplace.dto.res.UserResDTO;
 import workplace.entity.Team;
 import workplace.entity.User;
@@ -73,6 +74,17 @@ public final class UserConverter {
             .accessToken(accessToken)
             .tokenType("Bearer")
             .expiresIn(expiresIn)
+            .user(toUserResDTO(user))
+            .build();
+    }
+
+    public static TokenUserResDTO toTokenUserResDTO(
+        User user,
+        String accessToken
+    ) {
+        return TokenUserResDTO.builder()
+            .ok(true)
+            .accessToken(accessToken)
             .user(toUserResDTO(user))
             .build();
     }
