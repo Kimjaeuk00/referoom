@@ -5,10 +5,11 @@ import { api, TIMEOUT } from '@/api/client'
 import { errorText } from '@/api/errors'
 import { useProfileStore } from '@/stores/profile'
 import { renderMarkdown } from '@/lib/markdown'
-import { formatDate, PAPER_STATUS, safeUrl, SOURCE_TYPE, toneOfTag } from '@/lib/format'
+import { formatDate, PAPER_STATUS, SOURCE_TYPE, toneOfTag } from '@/lib/format'
 import LevelViewSelector from '@/components/common/LevelViewSelector.vue'
 import StatusBanner from '@/components/common/StatusBanner.vue'
 import ReviewBadge from '@/components/qa/ReviewBadge.vue'
+import PdfViewer from '@/components/paper/PdfViewer.vue'
 
 const route = useRoute()
 const profile = useProfileStore()
@@ -52,12 +53,20 @@ function jumpTo(key) {
   document.getElementById(`sec-${key}`)?.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' })
 }
 
+// 원문 칸: 출처(?page=)를 따라 들어오면 그 쪽을 바로 연다
+const viewer = ref(null)
+function openPdf(atPage) {
+  viewer.value = { id: paper.value.id, title: paper.value.title, url: paper.value.url, page: atPage || 1 }
+}
+
 async function load(id) {
   paper.value = null
   loadError.value = null
   summary.value = null
+  viewer.value = null
   try {
     paper.value = await api.rag(`/papers/${encodeURIComponent(id)}`)
+    if (page.value) openPdf(page.value)
   } catch (e) {
     loadError.value = e
   }
@@ -84,7 +93,11 @@ async function summarize() {
 </script>
 
 <template>
-  <div class="paper">
+  <div class="paper" :class="{ reading: viewer }">
+    <!-- 원문을 열면 왼쪽은 원문, 오른쪽은 요약 -->
+    <div v-if="viewer" class="reader-col">
+      <PdfViewer :paper="viewer" :show-detail-link="false" @close="viewer = null" />
+    </div>
     <StatusBanner v-if="loadError" :message="errorText(loadError, { NOT_FOUND: '이 논문을 찾을 수 없어요. 삭제됐을 수 있어요.' })" />
     <div v-else-if="!paper" class="skeleton" aria-label="불러오는 중"><span></span><span></span><span></span></div>
 
@@ -96,14 +109,13 @@ async function summarize() {
           <p class="byline">{{ [paper.authors, paper.year].filter(Boolean).join(', ') }}</p>
           <div class="links">
             <RouterLink class="btn btn-primary" :to="{ name: 'ask', query: { paper: paper.id, title: paper.title } }">이 논문에 질문하기</RouterLink>
-            <a v-if="safeUrl(paper.url)" class="btn" :href="safeUrl(paper.url)" target="_blank" rel="noopener noreferrer">원문 열기</a>
+            <button type="button" class="btn" @click="openPdf(page)">원문 보기</button>
           </div>
         </header>
 
         <p v-if="page" class="page-note">
           답변의 근거는 이 논문의 <strong>{{ page }}쪽</strong>이에요.
-          <template v-if="safeUrl(paper.url)">원문을 열어 해당 쪽을 확인하세요.</template>
-          <template v-else>원문 PDF에서 해당 쪽을 확인하세요.</template>
+          <button type="button" class="btn-quiet page-open" @click="openPdf(page)">{{ page }}쪽 원문 보기</button>
         </p>
 
         <section class="summary" aria-labelledby="summary-title">
@@ -156,7 +168,7 @@ async function summarize() {
                       <template v-if="src.page">{{ src.page }}쪽에서 가져온 내용이에요.</template>
                       원문에서 앞뒤 맥락을 확인하세요.
                     </p>
-                    <a v-if="safeUrl(paper.url)" :href="safeUrl(paper.url)" target="_blank" rel="noopener noreferrer">원문 열기</a>
+                    <button type="button" class="btn-quiet card-open" @click="openPdf(src.page)">{{ src.page ? `${src.page}쪽 원문 보기` : '원문 보기' }}</button>
                   </div>
                 </details>
               </div>
@@ -199,6 +211,26 @@ async function summarize() {
   padding-bottom: 64px;
 }
 
+/* 원문 보는 중: 원문 | 요약, 정보 기둥은 숨긴다 */
+.paper.reading {
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 32px;
+}
+
+.reading .rail {
+  display: none;
+}
+
+.reader-col {
+  position: sticky;
+  top: 72px;
+  align-self: start;
+  height: calc(100vh - 92px);
+  border: 1px solid var(--c-rule-strong);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+}
+
 .back {
   font-size: var(--fs-sm);
   color: var(--c-ink-muted);
@@ -233,6 +265,13 @@ h1 {
 
 .links .btn {
   text-decoration: none;
+}
+
+.page-open,
+.card-open {
+  min-height: 0;
+  padding: 0;
+  font-weight: 600;
 }
 
 .page-note {
@@ -467,6 +506,19 @@ h2 {
   .paper {
     grid-template-columns: 1fr;
     gap: 32px;
+  }
+
+  .paper.reading {
+    grid-template-columns: 1fr;
+  }
+
+  .reader-col {
+    position: fixed;
+    inset: 52px 0 0;
+    z-index: 30;
+    height: auto;
+    border: 0;
+    border-radius: 0;
   }
 
   .rail {

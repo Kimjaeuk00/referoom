@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useQaStore } from '@/stores/qa'
 import { useProfileStore } from '@/stores/profile'
@@ -17,6 +17,7 @@ import UploadDropzone from '@/components/library/UploadDropzone.vue'
 import TopicSearchModal from '@/components/library/TopicSearchModal.vue'
 import MicButton from '@/components/voice/MicButton.vue'
 import SpeakButton from '@/components/voice/SpeakButton.vue'
+import PdfViewer from '@/components/paper/PdfViewer.vue'
 import { voiceAvailable } from '@/lib/voice'
 
 const MAX = 1000
@@ -113,6 +114,26 @@ function onKeydown(event) {
   send()
 }
 
+// 원문은 왼쪽, 대화는 오른쪽. 근거 상자에서 논문 제목을 누르면 그 쪽의 원문을 연다.
+const viewer = ref(null)
+function openPdf(source) {
+  const paper = library.allPapers.find((p) => p.id === source.paper_id)
+  viewer.value = { id: source.paper_id, title: source.title, page: source.page, url: paper?.url ?? source.url }
+}
+
+// 답이 도착하면 첫 출처의 원문을 왼쪽에 열어 대화가 오른쪽으로 옮겨 가게 한다.
+// 찾지 못한 답(handoff)은 열 원문이 없으니 가운데에 그대로 둔다.
+watch(
+  () => {
+    const last = qa.turns.at(-1)
+    return last?.status === 'done' ? last : null
+  },
+  (turn) => {
+    const first = turn?.result?.handoff ? null : turn?.result?.source_details?.[0]
+    if (first?.paper_id) openPdf(first)
+  },
+)
+
 function addPaper(turn) {
   router.push({ name: 'library', query: { topic: turn.question } })
 }
@@ -166,7 +187,7 @@ function turnState(turn) {
 </script>
 
 <template>
-  <div class="workspace" :class="{ closed: !sideOpen, dragging }" :style="{ '--side-w': `${sideWidth}px` }">
+  <div class="workspace" :class="{ closed: !sideOpen, dragging, reading: viewer }" :style="{ '--side-w': `${sideWidth}px` }">
     <aside id="ask-side" class="side" :inert="!sideOpen" aria-label="논문과 질문 기록">
       <div class="side-inner">
       <div class="panel">
@@ -212,7 +233,15 @@ function turnState(turn) {
     <!-- 좁은 화면에서 서랍이 열렸을 때 바깥을 누르면 닫는다 -->
     <div class="scrim" aria-hidden="true" @click="setSide(false)" />
 
-    <section class="main-col">
+    <!-- 원문을 열면 왼쪽은 원문, 오른쪽은 대화(논문 목록 칸 자리를 원문이 쓴다) -->
+    <Transition name="reader">
+      <div v-if="viewer" class="reader-col">
+        <PdfViewer :paper="viewer" @close="viewer = null" />
+      </div>
+    </Transition>
+
+    <!-- 원문이 없을 땐 가운데, 원문을 열면 오른쪽 칸. 첫 질문 전에는 세로로도 가운데쯤 -->
+    <section class="main-col" :class="{ centered: !viewer, empty: !qa.turns.length }">
       <div class="control-bar" role="group" aria-label="질문 조건">
         <span v-if="!sideOpen && pickedIds.length" class="picked-note">논문 {{ pickedIds.length }}편에서 찾는 중</span>
         <div class="control">
@@ -287,6 +316,7 @@ function turnState(turn) {
                 @reask="(change) => reask(turn, change)"
                 @add-paper="addPaper(turn)"
                 @ask-team="askTeam(turn)"
+                @open-pdf="openPdf"
               >
                 <SpeakButton v-if="voiceAvailable" :text="turn.result.answer" />
               </AnswerView>
@@ -329,16 +359,62 @@ function turnState(turn) {
 </template>
 
 <style scoped>
+/* 칸 두 개: 왼쪽(논문 목록 또는 원문) | 대화. 너비만 바꿔서 열고 닫을 때 부드럽게 움직인다 */
 .workspace {
   display: grid;
   grid-template-columns: var(--side-w) minmax(0, 1fr);
   min-height: calc(100vh - 52px);
-  transition: grid-template-columns 0.25s ease;
+  transition: grid-template-columns 0.45s ease;
 }
 
 /* ☰로 닫으면 왼쪽 칸 너비가 0으로 줄며 패널이 밀려 들어간다 */
 .workspace.closed {
-  grid-template-columns: 0 minmax(0, 1fr);
+  grid-template-columns: 0px minmax(0, 1fr);
+}
+
+/* 원문 보는 중: 원문 | 대화 반반. 왼쪽 칸을 길이(50%)로 줘야 열고 닫을 때 너비가 부드럽게 바뀐다 */
+.workspace.reading,
+.workspace.reading.closed {
+  grid-template-columns: 50% minmax(0, 1fr);
+}
+
+/* 자리를 못 박아 둔다: 원문과 논문 목록은 왼쪽 칸에 겹쳐 놓고, 대화는 늘 오른쪽 칸.
+   그래야 원문이 사라지는 동안에도 대화 칸이 아래로 밀리지 않는다 */
+.side,
+.reader-col {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.main-col {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.reader-enter-active,
+.reader-leave-active {
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+.reader-enter-from,
+.reader-leave-to {
+  opacity: 0;
+  transform: translateX(-24px); /* 왼쪽에서 밀려 들어온다 */
+}
+
+.reading .side,
+.reading .scrim {
+  display: none;
+}
+
+.reader-col {
+  position: sticky;
+  top: 52px;
+  height: calc(100vh - 52px);
+  min-width: 0;
+  overflow: hidden;
+  z-index: 1; /* 닫히는 동안 다시 나타나는 논문 목록 위에 */
+  border-right: 1px solid var(--c-rule-strong);
 }
 
 .workspace.dragging {
@@ -532,6 +608,7 @@ function turnState(turn) {
   width: 100%;
   max-width: 860px;
   padding: 28px 28px 24px;
+  transition: margin-left 0.45s ease, padding-top 0.45s ease;
   display: grid;
   grid-template-columns: minmax(0, 1fr); /* 긴 수식이 열을 밀어 넓히지 않게 */
   align-content: start;
@@ -541,6 +618,42 @@ function turnState(turn) {
 .intro {
   max-width: 60ch;
   padding-top: 24px;
+}
+
+/* 원문이 없으면 대화 칸 가운데에 둔다(여백 계산이라 오른쪽으로 옮겨 갈 때 미끄러지듯 움직인다) */
+.centered .thread {
+  margin-left: max(0px, calc((100% - 860px) / 2));
+}
+
+.centered .composer-box {
+  margin-left: max(0px, calc((100% - 804px) / 2));
+}
+
+/* 첫 질문 전: 세로로도 가운데쯤, 글은 가운데 정렬 */
+.empty .thread {
+  padding-top: 14vh;
+}
+
+.empty .intro {
+  margin: 0 auto;
+  text-align: center;
+}
+
+.empty .quick {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.empty .quick button {
+  text-align: center;
+}
+
+/* 새 질문·답변은 아래에서 살짝 올라오며 나타난다 */
+@keyframes turn-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
 }
 
 .intro h1 {
@@ -589,6 +702,7 @@ function turnState(turn) {
 }
 
 .turn {
+  animation: turn-in 0.4s ease both;
   scroll-margin-top: 112px;
   display: grid;
   gap: 14px;
@@ -678,6 +792,7 @@ function turnState(turn) {
 
 .composer-box {
   max-width: 804px;
+  transition: margin-left 0.45s ease;
   border: 1px solid var(--c-glass-line);
   border-radius: var(--radius-l);
   background: var(--c-glass-strong);
@@ -754,6 +869,10 @@ function turnState(turn) {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .main-col {
+    grid-column: 1;
+  }
+
   .side {
     position: fixed;
     top: 52px;
@@ -777,6 +896,20 @@ function turnState(turn) {
 
   .splitter {
     display: none;
+  }
+
+  /* 좁은 화면에서는 원문이 화면을 덮는다 */
+  .workspace.reading,
+  .workspace.reading.closed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .reader-col {
+    position: fixed;
+    inset: 52px 0 0;
+    z-index: 30;
+    height: auto;
+    border: 0;
   }
 
   .workspace:not(.closed) .scrim {

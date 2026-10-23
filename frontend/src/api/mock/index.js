@@ -208,6 +208,43 @@ function getPaper({ params, claims }) {
   return paper ? [200, publicPaper(paper)] : aiError(404, 'NOT_FOUND', '논문을 찾을 수 없습니다.')
 }
 
+// 원문 PDF: GET /papers/{id}/pdf (문서에 없는 경로라 백엔드에 추가 요청). 목업은 쪽 번호가 보이는 PDF를 만들어 준다.
+// arXiv에서 수집한 논문(web)은 없는 것으로 돌려줘서 화면이 arXiv 원문으로 넘어가는 경로를 확인할 수 있게 한다.
+function getPaperPdf({ params, claims }) {
+  const paper = findPaper(claims, params.id)
+  if (!paper || paper.source_type === 'web') return aiError(404, 'NOT_FOUND', '원문 파일이 없습니다.')
+  return [200, mockPdf(paper.title, 12), between(300, 800)]
+}
+
+// 글꼴 내장 없이 Helvetica로 쓰는 아주 작은 PDF. 영문만 넣는다(쪽마다 제목과 쪽 번호).
+function mockPdf(title, pages) {
+  const esc = (t) => String(t).replace(/[^\x20-\x7e]/g, '?').replace(/([()\\])/g, '\\$1')
+  const objs = ['<< /Type /Catalog /Pages 2 0 R >>', null, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>']
+  const kids = []
+  for (let n = 1; n <= pages; n++) {
+    const text = [
+      `BT /F1 11 Tf 56 780 Td (${esc(title).slice(0, 80)}) Tj ET`,
+      `BT /F1 40 Tf 56 700 Td (Page ${n}) Tj ET`,
+      `BT /F1 11 Tf 56 660 Td (Mock PDF for Referoom. The real file comes from GET /papers/{id}/pdf.) Tj ET`,
+    ].join('\n')
+    objs.push(`<< /Length ${text.length} >>\nstream\n${text}\nendstream`)
+    const contentRef = objs.length
+    objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentRef} 0 R >>`)
+    kids.push(`${objs.length} 0 R`)
+  }
+  objs[1] = `<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${pages} >>`
+  let out = '%PDF-1.4\n'
+  const offsets = objs.map((body, i) => {
+    const at = out.length
+    out += `${i + 1} 0 obj\n${body}\nendobj\n`
+    return at
+  })
+  const xref = out.length
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`
+  return new Blob([out], { type: 'application/pdf' })
+}
+
 function deletePaper({ params, claims }) {
   const paper = findPaper(claims, params.id)
   if (!paper) return aiError(404, 'NOT_FOUND', '논문을 찾을 수 없습니다.')
@@ -503,6 +540,7 @@ const ROUTES = [
   ['GET', 'rag', /^\/library\/stats$/, stats, 'team'],
   ['GET', 'rag', /^\/papers$/, listPapers, 'team'],
   ['GET', 'rag', /^\/papers\/(?<id>[^/]+)$/, getPaper, 'team'],
+  ['GET', 'rag', /^\/papers\/(?<id>[^/]+)\/pdf$/, getPaperPdf, 'team'],
   ['DELETE', 'rag', /^\/papers\/(?<id>[^/]+)$/, deletePaper, 'team'],
   ['POST', 'rag', /^\/upload-paper$/, uploadPaper, 'team'],
   ['POST', 'rag', /^\/search-topic$/, searchTopic, 'team'],
