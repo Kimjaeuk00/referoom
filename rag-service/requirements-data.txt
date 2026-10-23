@@ -1,0 +1,12 @@
+# PDF extraction
+pypdf>=4.0
+
+# Upload API
+fastapi>=0.110,<1.0
+python-multipart>=0.0.9
+
+# Chunking, embeddings, and vector storage
+langchain-text-splitters>=1.1.0
+langchain-openai==1.1.7
+langchain-community==0.4.1
+faiss-cpu>=1.7

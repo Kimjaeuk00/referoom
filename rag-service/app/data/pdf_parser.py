@@ -7,7 +7,7 @@ from typing import Literal
 from pypdf import PdfReader
 
 
-PageText = tuple[int, str]
+PageTexts = list[tuple[int, str]]
 SCAN_ERROR = "텍스트 추출 불가(스캔 PDF)"
 REFERENCE_HEADING = re.compile(
     r"^\s*(?:(?:\d+(?:\.\d+)*|[IVXLC]+)[.)]?\s+)?"
@@ -18,7 +18,8 @@ REFERENCE_HEADING = re.compile(
 
 @dataclass
 class ReferenceSection:
-    page_no: int
+    start_page: int
+    end_page: int
     text: str
     type: Literal["references"] = field(default="references", init=False)
 
@@ -27,12 +28,12 @@ class ReferenceSection:
 class ParseResult:
     status: Literal["completed", "failed"]
     # 색인 대상 본문만 포함하며, 원래 PDF의 1부터 시작하는 페이지 번호를 유지합니다.
-    pages: list[PageText] = field(default_factory=list)
-    references: list[ReferenceSection] = field(default_factory=list)
+    pages: PageTexts = field(default_factory=list)
+    references: ReferenceSection | None = None
     error_msg: str | None = None
 
 
-def extract_pages(file_path: str) -> list[PageText]:
+def extract_pages(file_path: str) -> PageTexts:
     """빈 페이지도 포함하여 [(page_no, text)]로 추출합니다. OCR은 수행하지 않습니다."""
     reader = PdfReader(file_path)
     return [
@@ -45,7 +46,7 @@ def _normalize_line(line: str) -> str:
     return " ".join(line.split())
 
 
-def _remove_page_noise(pages: list[PageText]) -> list[PageText]:
+def _remove_page_noise(pages: PageTexts) -> PageTexts:
     page_lines = [
         (page_no, [line.strip() for line in text.splitlines()])
         for page_no, text in pages
@@ -86,34 +87,43 @@ def _clean_text(text: str) -> str:
     )
 
 
-def _split_references(pages: list[PageText]) -> tuple[list[PageText], list[ReferenceSection]]:
+def _split_references(pages: PageTexts) -> tuple[PageTexts, ReferenceSection | None]:
     body = []
-    references = []
+    reference_parts = []
+    start_page = None
+    end_page = None
     in_references = False
-    # 정제 후 텍스트의 뒤쪽 절반에 있는 독립 제목만 참고문헌 시작으로 봅니다.
-    total_chars = sum(len(text) for _, text in pages)
-    offset = 0
     for page_no, text in pages:
         body_lines = []
         reference_lines = []
         for line in text.splitlines(keepends=True):
             if (
                 not in_references
-                and offset >= total_chars * 0.5
                 and REFERENCE_HEADING.fullmatch(line.strip())
             ):
                 in_references = True
+                start_page = page_no
             if in_references:
                 reference_lines.append(line)
             else:
                 body_lines.append(line)
-            offset += len(line)
 
-        # 참고문헌으로만 구성된 페이지도 본문에는 빈 문자열로 남겨 페이지 번호를 보존합니다.
-        body.append((page_no, _clean_text("".join(body_lines))))
+        # 같은 페이지에 남아 있는 본문은 보존하고, 참고문헌 전용 페이지는 제외합니다.
+        body_text = _clean_text("".join(body_lines))
+        if body_text or not in_references:
+            body.append((page_no, body_text))
         reference_text = _clean_text("".join(reference_lines))
         if reference_text:
-            references.append(ReferenceSection(page_no=page_no, text=reference_text))
+            reference_parts.append(reference_text)
+            end_page = page_no
+
+    references = None
+    if start_page is not None and end_page is not None:
+        references = ReferenceSection(
+            start_page=start_page,
+            end_page=end_page,
+            text="\n\n".join(reference_parts),
+        )
     return body, references
 
 
