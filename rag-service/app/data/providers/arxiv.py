@@ -130,15 +130,20 @@ class ArxivProvider:
         호출 전에 select_version()으로 확인해야 합니다. 페이지 수 제한은 파서
         연결 단계에서 검사합니다. 후보에 들어 있는 임의 URL 대신 ID로 주소를 만듭니다.
         """
+        destination = Path(destination)
+        if destination.exists():
+            raise FileExistsError(f"저장 경로에 파일이 이미 있습니다: {destination}")
+        content = await self.download_pdf_bytes(candidate, max_pdf_mb=max_pdf_mb)
+        return await asyncio.to_thread(_save_pdf, destination, content)
+
+    async def download_pdf_bytes(self, candidate: PaperCandidate, *, max_pdf_mb: int = 20) -> bytes:
+        """PDF를 메모리로 받습니다. Zotero 등록에는 이 메서드를 사용합니다."""
         global _last_request
         _version_number(candidate.version)
         if re.fullmatch(r"(?:\d{4}\.\d{4,5}|[A-Za-z][A-Za-z0-9.-]*/\d{7})", candidate.candidate_id) is None:
             raise ValueError("유효한 arXiv 논문 ID가 필요합니다.")
         if max_pdf_mb <= 0:
             raise ValueError("PDF 크기 제한은 양수여야 합니다.")
-        destination = Path(destination)
-        if destination.exists():
-            raise FileExistsError(f"저장 경로에 파일이 이미 있습니다: {destination}")
         url = f"https://arxiv.org/pdf/{candidate.candidate_id}{candidate.version}"
         limit = max_pdf_mb * 1024 * 1024
         async with httpx.AsyncClient(
@@ -170,7 +175,7 @@ class ArxivProvider:
                             raise
                         await asyncio.sleep(3 * 2**attempt)
                         continue
-                    return await asyncio.to_thread(_save_pdf, destination, content)
+                    return bytes(content)
         raise RuntimeError("arXiv PDF 다운로드를 완료하지 못했습니다.")
 
     async def search(self, topic: str, max_results: int = 10) -> list[PaperCandidate]:
