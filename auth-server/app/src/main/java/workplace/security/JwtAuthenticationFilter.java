@@ -29,6 +29,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final Set<String> PUBLIC_API_PATHS = Set.of(
         "/api/signup",
         "/api/login",
+        "/api/logout",
         "/api/health"
     );
 

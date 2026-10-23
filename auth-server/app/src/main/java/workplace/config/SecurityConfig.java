@@ -43,6 +43,7 @@ public class SecurityConfig {
             .cors(withDefaults())
             .formLogin(AbstractHttpConfigurer::disable)
             .httpBasic(AbstractHttpConfigurer::disable)
+            .logout(AbstractHttpConfigurer::disable)
             .requestCache(AbstractHttpConfigurer::disable)
 
             .sessionManagement(session -> session
@@ -64,6 +65,7 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/api/signup",
                     "/api/login",
+                    "/api/logout",
                     "/api/health",
                     "/swagger-ui.html",
                     "/swagger-ui/**",

@@ -5,6 +5,7 @@ import workplace.dto.res.AuthCheckResDTO;
 import workplace.dto.res.LoginResDTO;
 import workplace.dto.res.MeResDTO;
 import workplace.dto.res.SignupResDTO;
+import workplace.dto.res.SuccessResDTO;
 import workplace.dto.res.TokenUserResDTO;
 import workplace.dto.res.UserResDTO;
 import workplace.entity.Team;
@@ -102,6 +103,12 @@ public final class UserConverter {
             .via("jwt")
             .username(user.getUsername())
             .sub(user.getId().toString())
+            .build();
+    }
+
+    public static SuccessResDTO toSuccessResDTO() {
+        return SuccessResDTO.builder()
+            .ok(true)
             .build();
     }
 }

@@ -12,13 +12,17 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.web.bind.annotation.*;
+import workplace.converter.UserConverter;
 import workplace.dto.req.LoginReqDTO;
 import workplace.dto.req.SignupReqDTO;
 import workplace.dto.res.AuthCheckResDTO;
 import workplace.dto.res.LoginResDTO;
 import workplace.dto.res.SignupResDTO;
+import workplace.dto.res.SuccessResDTO;
 import workplace.security.AuthCookieManager;
 import workplace.security.CustomPrincipal;
 import workplace.service.AuthService;
@@ -31,6 +35,8 @@ public class AuthController {
 
     private final AuthService authService;
     private final AuthCookieManager authCookieManager;
+    private final SecurityContextLogoutHandler logoutHandler =
+        new SecurityContextLogoutHandler();
 
     @PostMapping(
         value = "/signup",
@@ -109,5 +115,30 @@ public class AuthController {
         @AuthenticationPrincipal CustomPrincipal principal
     ) {
         return authService.checkAuth(principal.userId());
+    }
+
+    @PostMapping("/logout")
+    @Operation(
+        summary = "로그아웃",
+        description = "인증 상태와 관계없이 인증 쿠키를 삭제하고 현재 보안 컨텍스트를 정리합니다."
+    )
+    public SuccessResDTO logout(
+        @Parameter(hidden = true)
+        Authentication authentication,
+        HttpServletRequest servletRequest,
+        HttpServletResponse servletResponse
+    ) {
+        logoutHandler.logout(
+            servletRequest,
+            servletResponse,
+            authentication
+        );
+
+        authCookieManager.clearAuthCookies(
+            servletResponse,
+            servletRequest.isSecure()
+        );
+
+        return UserConverter.toSuccessResDTO();
     }
 }

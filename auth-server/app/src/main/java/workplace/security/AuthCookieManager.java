@@ -46,4 +46,34 @@ public class AuthCookieManager {
             cookie.toString()
         );
     }
+
+    public void clearAuthCookies(
+        HttpServletResponse response,
+        boolean secure
+    ) {
+        expireCookie(response, "ACCESS_TOKEN", true, secure);
+        expireCookie(response, "SESSION_ID", true, secure);
+        expireCookie(response, "APP_AUTH", false, secure);
+    }
+
+    private void expireCookie(
+        HttpServletResponse response,
+        String name,
+        boolean httpOnly,
+        boolean secure
+    ) {
+        ResponseCookie cookie = ResponseCookie
+            .from(name, "")
+            .httpOnly(httpOnly)
+            .secure(secure)
+            .sameSite("Lax")
+            .path("/")
+            .maxAge(0)
+            .build();
+
+        response.addHeader(
+            HttpHeaders.SET_COOKIE,
+            cookie.toString()
+        );
+    }
 }
