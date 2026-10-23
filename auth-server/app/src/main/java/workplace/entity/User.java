@@ -6,6 +6,8 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import workplace.enums.Role;
 import workplace.enums.SkillLevel;
 import workplace.enums.ViewType;
@@ -27,7 +29,9 @@ import workplace.enums.ViewType;
     }
 )
 @Getter
+@Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PROTECTED)
 public class User {
 
     @Id
@@ -52,6 +56,7 @@ public class User {
     )
     private Team team;
 
+    @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(
         name = "role",
@@ -60,6 +65,7 @@ public class User {
     )
     private Role role = Role.member;
 
+    @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(
         name = "skill_level",

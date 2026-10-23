@@ -6,6 +6,8 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import workplace.enums.TeamType;
 
 @Entity
@@ -19,7 +21,9 @@ import workplace.enums.TeamType;
     }
 )
 @Getter
+@Builder
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
+@AllArgsConstructor(access = AccessLevel.PROTECTED)
 public class Team {
 
     @Id
