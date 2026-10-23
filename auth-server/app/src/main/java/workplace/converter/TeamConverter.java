@@ -2,6 +2,7 @@ package workplace.converter;
 
 import workplace.entity.Team;
 import workplace.enums.TeamType;
+import workplace.dto.res.UserResDTO;
 
 public final class TeamConverter {
 
@@ -19,4 +20,16 @@ public final class TeamConverter {
             .inviteCode(inviteCode)
             .build();
     }
+
+    public static UserResDTO.TeamInfo toTeamInfoDTO(Team team) {
+    if (team == null) {
+        return null;
+    }
+
+    return UserResDTO.TeamInfo.builder()
+        .id(team.getId())
+        .name(team.getName())
+        .type(team.getTeamType())
+        .build();
+}
 }

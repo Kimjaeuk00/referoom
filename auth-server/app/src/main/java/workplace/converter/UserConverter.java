@@ -6,6 +6,8 @@ import workplace.entity.Team;
 import workplace.entity.User;
 import workplace.enums.Role;
 import workplace.enums.SkillLevel;
+import workplace.dto.res.LoginResDTO;
+import workplace.dto.res.UserResDTO;
 
 public final class UserConverter {
 
@@ -45,6 +47,32 @@ public final class UserConverter {
             .teamId(teamId)
             .role(user.getRole())
             .inviteCode(inviteCode)
+            .build();
+    }
+
+    public static UserResDTO toUserResDTO(User user) {
+    return UserResDTO.builder()
+        .id(user.getId())
+        .username(user.getUsername())
+        .displayName(user.getDisplayName())
+        .role(user.getRole())
+        .level(user.getSkillLevel())
+        .view(user.getEffectiveView())
+        .team(TeamConverter.toTeamInfoDTO(user.getTeam()))
+        .build();
+}
+
+    public static LoginResDTO toLoginResDTO(
+        User user,
+        String accessToken,
+        long expiresIn
+    ) {
+        return LoginResDTO.builder()
+            .ok(true)
+            .accessToken(accessToken)
+            .tokenType("Bearer")
+            .expiresIn(expiresIn)
+            .user(toUserResDTO(user))
             .build();
     }
 }

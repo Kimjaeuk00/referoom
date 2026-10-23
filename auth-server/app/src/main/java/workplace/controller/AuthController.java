@@ -3,13 +3,18 @@ package workplace.controller;
 import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import workplace.dto.req.LoginReqDTO;
 import workplace.dto.req.SignupReqDTO;
+import workplace.dto.res.LoginResDTO;
 import workplace.dto.res.SignupResDTO;
+import workplace.security.AuthCookieManager;
 import workplace.service.AuthService;
 
 @RestController
@@ -19,6 +24,7 @@ import workplace.service.AuthService;
 public class AuthController {
 
     private final AuthService authService;
+    private final AuthCookieManager authCookieManager;
 
     @PostMapping(
         value = "/signup",
@@ -42,5 +48,44 @@ public class AuthController {
         @Valid @ModelAttribute SignupReqDTO request
     ) {
         return authService.signup(request);
+    }
+
+    @PostMapping(
+        value = "/login",
+        consumes = MediaType.APPLICATION_JSON_VALUE
+    )
+    @Operation(summary = "로그인")
+    public LoginResDTO login(
+        @Valid @RequestBody LoginReqDTO request,
+        HttpServletRequest servletRequest,
+        HttpServletResponse servletResponse
+    ) {
+        LoginResDTO result = authService.login(request);
+
+        authCookieManager.setAccessTokenCookie(
+            servletResponse,
+            result.getAccessToken(),
+            result.getExpiresIn(),
+            servletRequest.isSecure()
+        );
+
+        return result;
+    }
+
+    @Hidden
+    @PostMapping(
+        value = "/login",
+        consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE
+    )
+    public LoginResDTO loginForm(
+        @Valid @ModelAttribute LoginReqDTO request,
+        HttpServletRequest servletRequest,
+        HttpServletResponse servletResponse
+    ) {
+        return login(
+            request,
+            servletRequest,
+            servletResponse
+        );
     }
 }

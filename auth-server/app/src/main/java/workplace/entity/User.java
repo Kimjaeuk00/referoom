@@ -99,4 +99,16 @@ public class User {
             "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
     )
     private LocalDateTime updatedAt;
+
+    public ViewType getEffectiveView() {
+    if (viewPref != null) {
+        return viewPref;
+    }
+
+    if (team != null) {
+        return ViewType.valueOf(team.getTeamType().name());
+    }
+
+    return ViewType.dev;
+}
 }

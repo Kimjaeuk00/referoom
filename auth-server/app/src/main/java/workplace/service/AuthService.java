@@ -19,6 +19,9 @@ import workplace.enums.Role;
 import workplace.enums.TeamType;
 import workplace.exception.ApiException;
 import workplace.repository.UserRepository;
+import workplace.dto.req.LoginReqDTO;
+import workplace.dto.res.LoginResDTO;
+import workplace.security.JwtTokenProvider;
 
 @Service
 @RequiredArgsConstructor
@@ -26,6 +29,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final TeamService teamService;
+    private final JwtTokenProvider jwtTokenProvider;
 
     @Transactional
     public SignupResDTO signup(SignupReqDTO request) {
@@ -130,5 +134,44 @@ public class AuthService {
         }
 
         return false;
+    }   
+
+    @Transactional(readOnly = true)
+    public LoginResDTO login(LoginReqDTO request) {
+        if (request.password()
+                .getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw new ApiException(ErrorCode.INVALID_CREDENTIALS);
+        }
+
+        User user = userRepository.findByUsername(request.username())
+            .orElseThrow(
+                () -> new ApiException(ErrorCode.INVALID_CREDENTIALS)
+            );
+
+        boolean passwordMatches;
+
+        try {
+            passwordMatches = BCrypt.checkpw(
+                request.password(),
+                user.getPassword()
+            );
+        } catch (IllegalArgumentException exception) {
+            throw new ApiException(
+                ErrorCode.INVALID_CREDENTIALS,
+                exception
+            );
+        }
+
+        if (!passwordMatches) {
+            throw new ApiException(ErrorCode.INVALID_CREDENTIALS);
+        }
+
+        String accessToken = jwtTokenProvider.createToken(user);
+
+        return UserConverter.toLoginResDTO(
+            user,
+            accessToken,
+            jwtTokenProvider.getExpirationSeconds()
+        );
     }
 }
