@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "referoom-common"
+version = "0.1.0"
+description = "레퍼룸 Python 서비스 공통 인증·오류·로그 모듈"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110,<1.0",
+    "PyJWT>=2.10.1,<3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<10",
+    "httpx>=0.27,<1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["referoom_common*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
