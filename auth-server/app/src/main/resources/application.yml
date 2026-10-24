@@ -1,0 +1,31 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: referoom-auth
+
+  datasource:
+    url: jdbc:mariadb://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.mariadb.jdbc.Driver
+
+  jpa:
+    open-in-view: false
+    show-sql: false
+    hibernate:
+      ddl-auto: update
+
+  sql:
+    init:
+      mode: never
+
+jwt:
+  secret: ${JWT_SECRET}
+  issuer: simple-auth-server
+  expiration-seconds: 3600
+
+app:
+  frontend-url: ${FRONTEND_URL}
+  cors-allowed-origins: ${CORS_ALLOWED_ORIGINS}

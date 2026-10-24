@@ -1,5 +1,33 @@
-# Ignore Gradle project-specific cache directory
-.gradle
+# 실제 비밀값이 들어 있는 환경 파일 제외
+.env
+.env.*
+*.env
+# 비밀값 없이 변수명과 예시만 담은 파일은 커밋
+!.env.example
+!**/.env.example
 
-# Ignore Gradle build output directory
-build
+# Gradle 캐시 및 컴파일·빌드 산출물 제외
+.gradle/
+build/
+bin/
+out/
+*.class
+*.jar
+# 다른 개발자도 빌드할 수 있도록 Gradle Wrapper는 커밋
+!gradle/wrapper/gradle-wrapper.jar
+
+# 실행 중 생성되는 로그 제외
+logs/
+*.log
+
+# 개인 IDE 설정 제외
+.vscode/
+.idea/
+*.iml
+
+# 운영체제에서 자동 생성하는 파일 제외
+.DS_Store
+Thumbs.db
+
+# application.yml, Java 소스, Gradle 설정 파일은 커밋 대상
+# application.yml에는 실제 비밀값 대신 환경변수 참조를 사용
