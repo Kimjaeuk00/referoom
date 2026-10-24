@@ -71,3 +71,12 @@ test('safeUrl: http(s)만 링크로 쓴다', async () => {
   assert.equal(safeUrl('data:text/html,x'), null)
   assert.equal(safeUrl(null), null)
 })
+
+test('arxivPdfUrl: arXiv abs·pdf 주소만 PDF 주소로 바꾼다', async () => {
+  const { arxivPdfUrl } = await import('./format.js')
+  assert.equal(arxivPdfUrl('https://arxiv.org/abs/2106.09685'), 'https://arxiv.org/pdf/2106.09685')
+  assert.equal(arxivPdfUrl('https://arxiv.org/pdf/2106.09685v2.pdf'), 'https://arxiv.org/pdf/2106.09685v2')
+  assert.equal(arxivPdfUrl('http://www.arxiv.org/abs/hep-th/9901001'), 'https://arxiv.org/pdf/hep-th/9901001')
+  assert.equal(arxivPdfUrl('https://example.com/abs/2106.09685'), null)
+  assert.equal(arxivPdfUrl(null), null)
+})

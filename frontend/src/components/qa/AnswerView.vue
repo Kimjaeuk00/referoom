@@ -14,7 +14,7 @@ const props = defineProps({
   busy: { type: Boolean, default: false },
   reaskable: { type: Boolean, default: true }, // 음성 튜터에서는 다시 묻기 대신 다시 말한다
 })
-const emit = defineEmits(['reask', 'add-paper', 'ask-team'])
+const emit = defineEmits(['reask', 'add-paper', 'ask-team', 'open-pdf'])
 
 const details = computed(() => props.result.source_details ?? [])
 const hasSources = computed(() => details.value.length > 0 || (props.result.sources?.length ?? 0) > 0)
@@ -52,7 +52,7 @@ const otherView = computed(() => (props.params.view === 'rnd' ? 'dev' : 'rnd'))
   <div v-else class="answer">
     <div ref="prose" class="prose" @click="onBodyClick" v-html="html" />
     <ReviewBadge v-if="result.needs_review" :text="result.answer" :sources="details" />
-    <SourceList :items="details" :fallback="result.sources ?? []" :active="active" />
+    <SourceList :items="details" :fallback="result.sources ?? []" :active="active" @open-pdf="emit('open-pdf', $event)" />
     <div class="reask" role="group" aria-label="이 답변으로 할 수 있는 일">
       <template v-if="reaskable">
         <button type="button" class="btn" :disabled="busy || !easier" @click="emit('reask', { level: easier })">더 쉽게</button>

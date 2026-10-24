@@ -1,6 +1,5 @@
 <script setup>
 import { nextTick, ref, useId, watch } from 'vue'
-import { RouterLink } from 'vue-router'
 import { safeUrl, toneOfLabel } from '@/lib/format'
 import Icon from '@/components/common/Icon.vue'
 
@@ -10,6 +9,7 @@ const props = defineProps({
   fallback: { type: Array, default: () => [] }, // sources: "논문명 p.N" 문자열(상세가 없을 때만)
   active: { type: Object, default: null }, // { label, n } 본문에서 누른 근거
 })
+const emit = defineEmits(['open-pdf']) // 논문 제목을 누르면 원문 칸을 연다
 
 const uid = useId()
 const current = ref(null)
@@ -38,7 +38,7 @@ watch(
           <span class="ref" :data-tone="toneOfLabel(s.label)">{{ s.label }}</span>
           <div class="body">
             <p class="where">
-              <RouterLink v-if="s.paper_id" :to="{ name: 'paper', params: { id: s.paper_id }, query: s.page ? { page: s.page } : {} }">{{ s.title }}</RouterLink>
+              <button v-if="s.paper_id" type="button" class="open" :title="s.page ? `${s.page}쪽 원문 보기` : '원문 보기'" @click="emit('open-pdf', s)">{{ s.title }}</button>
               <a v-else-if="safeUrl(s.url)" :href="safeUrl(s.url)" target="_blank" rel="noopener noreferrer">{{ s.title }}</a>
               <span v-else>{{ s.title }}</span>
               <span v-if="s.page" class="page tabular">{{ s.page }}쪽</span>
@@ -120,13 +120,24 @@ li.on::after {
 }
 
 .where a,
+.where .open,
 .where span:first-child {
   color: var(--c-ink);
   font-weight: 600;
   text-decoration: none;
 }
 
-.where a:hover {
+.open {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.where a:hover,
+.where .open:hover {
   text-decoration: underline;
 }
 

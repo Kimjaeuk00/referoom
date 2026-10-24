@@ -5,7 +5,6 @@ import { useAuthStore } from '@/stores/auth'
 import { errorText } from '@/api/errors'
 import BrandLogo from '@/components/common/BrandLogo.vue'
 import Icon from '@/components/common/Icon.vue'
-import ReadersIllust from '@/components/illust/ReadersIllust.vue'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -163,7 +162,6 @@ async function submit() {
               <p v-show="step === i" class="step-text">{{ s.text }}</p>
             </li>
           </ol>
-          <div class="steps-art"><ReadersIllust :size="300" /></div>
         </div>
       </section>
 
@@ -399,11 +397,8 @@ async function submit() {
 }
 
 .steps-body {
-  margin-top: 40px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 40px;
-  align-items: center;
+  max-width: 640px;
+  margin: 40px auto 0;
 }
 
 .step-list {
@@ -461,14 +456,6 @@ async function submit() {
   padding: 0 18px 16px 58px;
   font-size: var(--fs-sm);
   color: var(--c-text);
-}
-
-.steps-art {
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  border-radius: var(--radius-l);
-  background: var(--c-paper);
 }
 
 .faq {
@@ -563,7 +550,6 @@ async function submit() {
 
 @media (max-width: 960px) {
   .hero,
-  .steps-body,
   .book {
     grid-template-columns: minmax(0, 1fr);
   }

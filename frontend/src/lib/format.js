@@ -55,3 +55,10 @@ export function toneOfTag(tag) {
   for (const ch of String(tag)) h = (h * 31 + ch.codePointAt(0)) >>> 0
   return `tone-${h % 4}`
 }
+
+// arXiv 논문 주소(abs·pdf, 버전 포함)를 PDF 주소로. arXiv가 아니면 null.
+// arXiv는 다른 사이트에서 PDF를 띄우는 것을 허용한다(Access-Control-Allow-Origin: *).
+export function arxivPdfUrl(url) {
+  const m = /^https?:\/\/(?:www\.)?arxiv\.org\/(?:abs|pdf)\/([^?#]+?)(?:\.pdf)?(?:[?#].*)?$/.exec(String(url ?? ''))
+  return m ? `https://arxiv.org/pdf/${m[1]}` : null
+}
