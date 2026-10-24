@@ -1,0 +1,22 @@
+# RAG 서비스(app/rag) 실행·테스트용 의존성. 데이터 파트의 requirements와 합칠 때 버전 충돌만 확인한다.
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.29,<1.0
+pydantic>=2.11,<3.0
+python-dotenv>=1.0
+httpx>=0.27,<1.0
+python-jose>=3.3          # JWT 검증 (common-py 도착 전 auth_stub)
+numpy>=1.26
+pypdf>=4.0                # PDF 텍스트 추출 (BSD). PyMuPDF는 AGPL이라 쓰지 않는다
+langchain-core>=1.2.7,<2.0
+langchain-text-splitters>=1.1.0
+langchain-openai==1.1.7   # LLM 호출 (임베딩은 EMBEDDING_BACKEND=openai일 때만)
+openai==1.109.1
+# 임베딩 BAAI/bge-m3 (기본). 첫 실행 때 모델 약 2GB를 ~/.cache/huggingface 에 받는다 → 컨테이너는 이 경로를 볼륨으로 둔다
+sentence-transformers>=3.0
+torch>=2.2
+# 이미지 재시도(PAGE_IMAGES=on): 원본 PDF 페이지 렌더링
+pypdfium2>=4.30           # BSD-3-Clause / Apache-2.0
+pillow>=10.0              # MIT-CMU
+
+# 개발
+pytest>=8.0
