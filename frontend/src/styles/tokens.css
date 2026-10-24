@@ -1,0 +1,172 @@
+/* Referoom 디자인 토큰
+   Yana Sukhetska의 심리상담 랜딩 시안 양식을 따른다: 차분한 따뜻한 흰 바탕, 복숭아빛 큰 영역,
+   세이지 초록 강조 글자, 복숭아·주황 주요 버튼, 가는 테두리 카드, 제목은 고전 세리프, 본문은 산세리프. */
+:root {
+  color-scheme: light;
+
+  /* 복숭아·주황: 주요 버튼(흰 글자와 대비 4.5:1 이상이 되게 시안보다 조금 진하게) */
+  --c-accent: #c4622f;
+  --c-accent-ink: #a9511f;
+  --c-accent-wash: #fbeee5;
+  /* 세이지 초록: 강조 글자·포커스·선택 */
+  --c-accent-2: #5f8a5b;
+  --c-accent-2-wash: #eef3ec;
+
+  --c-peach: #fbeee5; /* 시안의 첫 영역 바탕 */
+  --c-sage-bg: #eef2ec; /* 시안의 단계 영역 바탕 */
+  --c-mint: #8fb38a;
+  --c-blue: #9db3c3;
+
+  --c-marker: #ffe16a;
+  --c-marker-soft: #fff6c9;
+  --c-paper: #ffffff;
+  --c-glass: rgb(255 255 255 / 0.75);
+  --c-glass-line: #e8e3dd;
+  --c-glass-strong: #ffffff;
+  --c-bg: #faf8f5;
+  --c-side: #f7f4f0;
+  --c-dot: transparent;
+  --c-surface: #f3efea;
+  --c-ink: #1f2421;
+  --c-ink-muted: #727a74;
+  --c-rule: #e8e3dd;
+  --c-rule-strong: #d6cfc7;
+  --c-danger: #b3261e;
+  --c-danger-wash: #fbe9e7;
+  --c-review: #9a4a22;
+  --c-review-wash: #fdf0e7;
+  --c-review-line: #efc0a2;
+  --c-info-wash: #eef3ec;
+  --c-info-line: #d3e0cf;
+  --c-ok: #3f6b3a;
+  --c-black: #1f2421;
+  --c-text: #4a504c;
+  --c-on-accent: #ffffff;
+  --c-on-black: #ffffff;
+
+  --c-bar: rgb(255 255 255 / 0.92);
+  --c-bar-soft: rgb(255 255 255 / 0.88);
+  --c-scrim: rgb(31 36 33 / 0.3);
+
+  /* 시안은 그라데이션이 없다. 보조 버튼은 옅은 세이지, 강조 낱말은 세이지 단색 */
+  --grad-soft: var(--c-accent-2-wash);
+  --grad-word: linear-gradient(var(--c-accent-2), var(--c-accent-2));
+  --grad-line: linear-gradient(var(--c-rule-strong), var(--c-rule-strong));
+  --bg-glow: linear-gradient(180deg, var(--c-peach) 0, var(--c-bg) 62%);
+  --grad-side: var(--c-side);
+  --grad-top: var(--c-bg);
+
+  --shadow-rgb: 60 45 30;
+  --shadow-card: 0 1px 2px rgb(60 45 30 / 0.04), 0 6px 18px rgb(60 45 30 / 0.05);
+  --shadow-float: 0 1px 2px rgb(60 45 30 / 0.05), 0 12px 32px rgb(60 45 30 / 0.09);
+
+  /* 출처 표시·태그: 세이지, 복숭아, 모래, 회청 (모두 차분한 계열) */
+  --tone0-fill: #e5efe3;
+  --tone0-line: #8fb38a;
+  --tone0-ink: #3f6b3a;
+  --tone1-fill: #fbe6d8;
+  --tone1-line: #eaa47f;
+  --tone1-ink: #9a4a22;
+  --tone2-fill: #f3ead9;
+  --tone2-line: #cdb48a;
+  --tone2-ink: #75603a;
+  --tone3-fill: #e4ebf0;
+  --tone3-line: #9db3c3;
+  --tone3-ink: #3f5a6c;
+
+  /* 구조 요약 강조(문제·방법·결과) */
+  --c-goal: #3f5a6c;
+  --c-goal-wash: #eef3f7;
+  --c-method: #3f6b3a;
+  --c-method-wash: #eef4ec;
+  --c-result: #9a4a22;
+  --c-result-wash: #fdf1e9;
+
+  /* 제목은 시안처럼 고전 세리프(라틴 Source Serif 4, 한글 Noto Serif KR), 본문은 Pretendard */
+  --font: "Pretendard Variable", "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-display: "Source Serif 4", "Noto Serif KR", "AppleMyungjo", Georgia, serif;
+  --font-mono: var(--font);
+
+  /* 12 / 14 / 16 / 18 / 24 / 32 px */
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.5rem;
+  --fs-2xl: 2rem;
+  --lh: 1.55;
+  --lh-tight: 1.2;
+
+  --radius-s: 8px;
+  --radius-m: 12px;
+  --radius-l: 20px;
+  --shell-w: 1200px;
+}
+
+/* 다크 모드: 따뜻한 짙은 회색 바탕, 복숭아는 어둡게 눌러 영역 바탕으로, 세이지·주황은 밝게.
+   data-theme는 index.html 첫 스크립트와 useTheme이 정한다(시스템 설정 또는 사용자가 고른 값). */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --c-accent: #e38a5c;
+  --c-accent-ink: #f0a57e;
+  --c-accent-wash: #2b201a;
+  --c-accent-2: #9cc496;
+  --c-accent-2-wash: #1d261c;
+
+  --c-peach: #241c17;
+  --c-sage-bg: #1a2119;
+
+  --c-marker-soft: #3a3317;
+  --c-paper: #1b1d1b;
+  --c-glass: rgb(255 255 255 / 0.05);
+  --c-glass-line: #2e2b28;
+  --c-glass-strong: #1f211f;
+  --c-bg: #141513;
+  --c-side: #171816;
+  --c-surface: #242522;
+  --c-ink: #f1ede7;
+  --c-ink-muted: #a59f97;
+  --c-rule: #2e2b28;
+  --c-rule-strong: #403b36;
+  --c-danger: #ff8a7d;
+  --c-danger-wash: #3a1d1a;
+  --c-review: #f3b28d;
+  --c-review-wash: #2b1f18;
+  --c-review-line: #6a4330;
+  --c-info-wash: #1a2119;
+  --c-info-line: #2d3a2b;
+  --c-ok: #9cc496;
+  --c-black: #f1ede7;
+  --c-text: #d4cec6;
+  --c-on-accent: #1a120d;
+  --c-on-black: #141513;
+
+  --c-bar: rgb(20 21 19 / 0.9);
+  --c-bar-soft: rgb(20 21 19 / 0.85);
+  --c-scrim: rgb(0 0 0 / 0.55);
+
+  --shadow-rgb: 0 0 0;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 18px rgb(0 0 0 / 0.25);
+  --shadow-float: 0 1px 2px rgb(0 0 0 / 0.35), 0 12px 32px rgb(0 0 0 / 0.4);
+
+  --tone0-fill: #1f2d1d;
+  --tone0-line: #557a50;
+  --tone0-ink: #b9dbb3;
+  --tone1-fill: #33231a;
+  --tone1-line: #9a6447;
+  --tone1-ink: #f6c3a5;
+  --tone2-fill: #2d271c;
+  --tone2-line: #8a7550;
+  --tone2-ink: #e6d3ad;
+  --tone3-fill: #1d262d;
+  --tone3-line: #5a7385;
+  --tone3-ink: #c3d4e0;
+
+  --c-goal: #c3d4e0;
+  --c-goal-wash: #1a2128;
+  --c-method: #b9dbb3;
+  --c-method-wash: #172015;
+  --c-result: #f6c3a5;
+  --c-result-wash: #2a1d16;
+}
