@@ -34,12 +34,12 @@ def get_llm_response(user_input: str, target_language: str = "en") -> str:
     user_input = user_input.strip()
 
     if target_language not in SUPPORTED_TARGET_LANGUAGES:
-        logger.warning(f"[LLM] Unsupported target language: {target_language}")
+        logger.warning("[LLM] Unsupported target language; using default")
         target_language = "en"
 
     target_language_name = SUPPORTED_TARGET_LANGUAGES[target_language]
 
-    logger.info(f"[LLM TRANSLATION INPUT] {user_input}")
+    logger.info("[LLM] Translation input length=%d", len(user_input))
     logger.info(f"[LLM TARGET LANGUAGE] {target_language_name}")
 
     try:
@@ -74,10 +74,10 @@ def get_llm_response(user_input: str, target_language: str = "en") -> str:
 
         translated_text = response.choices[0].message.content.strip()
 
-        logger.info(f"[LLM TRANSLATION OUTPUT] {translated_text}")
+        logger.info("[LLM] Translation output length=%d", len(translated_text))
 
         return translated_text
 
-    except Exception as e:
-        logger.exception(f"[LLM ERROR] {e}")
+    except Exception:
+        logger.error("[LLM] Translation failed")
         return "I'm sorry, something went wrong while translating the text."

@@ -6,29 +6,59 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from starlette.staticfiles import StaticFiles
 from jose import jwt, JWTError
-
-from app.routers.stt_router import router as stt_router
-from app.routers.tts_router import router as tts_router
-from app.routers.stt_tts_router import router as stt_tts_router
-
+from contextlib import asynccontextmanager
+import asyncio
+import logging
+from starlette.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse
 from pathlib import Path
 from dotenv import load_dotenv
 import os
-import openai
 
 # 0) Load environment variables (.env)
 
 APP_DIR = Path(__file__).resolve().parent           # .../voice-ai-pjt/app
 PROJECT_DIR = APP_DIR.parent                        # .../voice-ai-pjt
 
-dotenv_path = APP_DIR / ".env"                      # app/.env
-# dotenv_path = PROJECT_DIR / ".env"                # Replace with this line if placed in the root directory
-load_dotenv(dotenv_path)
+# Process environment wins; service-local .env precedes the legacy app/.env.
+load_dotenv(PROJECT_DIR / ".env")
+load_dotenv(APP_DIR / ".env")
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    raise ValueError("API key is not configured. Please check the .env file.")
-openai.api_key = OPENAI_API_KEY
+from app.routers.audio import AUDIO_TTL_SECONDS, storage as audio_storage
+from app.services import stt_service
+
+logger = logging.getLogger(__name__)
+
+
+async def load_whisper():
+    try:
+        await run_in_threadpool(stt_service.initialize_model)
+    except Exception:
+        # Keep health available without exposing provider errors or local paths.
+        logger.error("Whisper initialization failed; restart after checking model availability.")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await run_in_threadpool(audio_storage.cleanup)
+    loading_task = asyncio.create_task(load_whisper())
+    cleanup_task = asyncio.create_task(cleanup_audio())
+    try:
+        yield
+    finally:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
+        # Let model initialization finish before disposing of the application.
+        await loading_task
+
+
+async def cleanup_audio():
+    while True:
+        await asyncio.sleep(AUDIO_TTL_SECONDS)
+        await run_in_threadpool(audio_storage.cleanup)
 
 # 1) Path configuration
 
@@ -38,14 +68,33 @@ UPLOAD_DIR = APP_DIR / "routers" / "uploads"
 INDEX_HTML   = STATIC_DIR / "index.html"
 STT_HTML     = STATIC_DIR / "stt.html"
 TTS_HTML     = STATIC_DIR / "tts.html"
-STT_TTS_HTML = STATIC_DIR / "stt-tts.html"
 
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # 2) FastAPI App
 
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
+
+
+@app.get(
+    "/health", tags=["health"], summary="Whisper 모델 준비 상태",
+    description="인증 없이 확인합니다. 모델 로딩·워밍업 완료 후 200, 준비되지 않으면 503입니다.",
+    responses={
+        200: {"content": {"application/json": {"example": {"whisper": "ready"}}}},
+        503: {"description": "모델 미준비", "content": {"application/json": {"example": {
+            "detail": "음성 인식 모델이 준비되지 않았습니다.", "code": "NOT_READY",
+        }}}},
+    },
+)
+async def health():
+    state = stt_service.model_status()
+    if state != "ready":
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "음성 인식 모델이 준비되지 않았습니다.", "code": "NOT_READY"},
+        )
+    return {"whisper": "ready"}
 
 # Configuration that must match the Java server
 SECRET_KEY = "RANDOM_SECRET_KEY"   # Must be identical to Java JwtUtil.SECRET
@@ -117,14 +166,6 @@ async def tts_page(current_user: dict = Depends(get_current_user)):
     _must_exist(TTS_HTML, "tts.html")
     return FileResponse(TTS_HTML)
 
-@app.get("/stt-tts.html", include_in_schema=False)
-# [Q02] 음성 통번역 HTML의 접근 제어
-# 힌트: 페이지 함수 실행 전 인증 의존성이 먼저 수행되도록 연결하세요.
-# TODO Q02: 기본값 None을 인증 의존성 호출로 바꾸세요.
-async def stt_tts_page(current_user: dict = Depends(get_current_user)):
-    _must_exist(STT_TTS_HTML, "stt-tts.html")
-    return FileResponse(STT_TTS_HTML)
-
 # 5) Static file mount
 #    Note: If /static is opened with StaticFiles(directory=STATIC_DIR),
 #       "direct access" to /static/index.html becomes possible.
@@ -150,19 +191,25 @@ async def block_direct_html_under_static(request: Request, call_next):
     return await call_next(request)
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")      # /static/*
-app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")    # /uploads/*
 
 # 6) CORS
 #   - If using authentication cookie-based approach, the combination of allow_origins="*" + allow_credentials=True is not allowed.
 #   - If the API is only used from the current page (8008), there is no need to set CORS permissively.
 #   - If there is a fetch that integrates with 8080 (authentication server), allow only the exact origin.
 
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOWED_ORIGINS", "http://localhost:5174,http://localhost:8008",
+    ).split(",")
+    if origin.strip()
+]
+if "*" in cors_origins:
+    raise ValueError("CORS_ALLOWED_ORIGINS must contain explicit origins, not '*'.")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8008",
-        "http://127.0.0.1:8008",
-    ],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -185,15 +232,15 @@ def favicon(current_user: dict = Depends(get_current_user)):
 
 # 8) Router registration (if you want to protect the API with JWT as well, it is recommended to apply Depends(get_current_user) inside the router)
 
-app.include_router(stt_router, prefix="/stt")
-app.include_router(tts_router, prefix="/tts")
-app.include_router(stt_tts_router, prefix="/stt-tts")
+# /stt, /tts, and /audio registration wait for common-py require_team.
+# Legacy cookie-only STT/TTS routers are no longer served.
+# Do not register an unauthenticated or locally authenticated substitute.
 
 # 9) Local execution
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8008, reload=True)
+    uvicorn.run("app.main:app", host="127.0.0.1", port=8008)
     
 # 1. Direct access blocking without authentication is applied: Both of the following must be blocked to function correctly
 # http://localhost:8008/index.html  → 401
@@ -207,5 +254,4 @@ if __name__ == "__main__":
 # python -m uvicorn app.main:app --port 8008
 # Step-by-step operation test after Java authentication..
 # http://localhost:8008/index.html -> Voice recognition recording test
-# http://localhost:8008/stt-tts.html -> Voice recognition recording -> STT conversion demo
 
