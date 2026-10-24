@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.data.routers import batches, library, upload, zotero
 from app.rag import config_rag
 from app.rag.errors import register_error_handlers
 from app.rag.router import router as rag_router
@@ -19,3 +20,5 @@ app.add_middleware(
 )
 register_error_handlers(app)
 app.include_router(rag_router)
+for data_router in (library.router, upload.router, batches.router, zotero.router):
+    app.include_router(data_router)

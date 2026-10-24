@@ -5,6 +5,15 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+# Zotero 값은 프로젝트 루트 .env에 있다. 이미 설정된 값은 덮어쓰지 않으므로 rag-service/.env가 우선한다
+load_dotenv(Path(__file__).resolve().parents[3] / ".env")
+
+
+def _optional_int(name: str) -> int | None:
+    """비어 있거나 숫자가 아니면 None (설정 누락은 해당 기능이 409로 알린다)."""
+    value = (os.getenv(name) or "").strip()
+    return int(value) if value.isdecimal() and int(value) > 0 else None
+
 
 JWT_SECRET = os.getenv("JWT_SECRET")
 JWT_ISSUER = "simple-auth-server"
@@ -51,5 +60,17 @@ CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "50"))
 # 1단계 레이아웃 정리 규칙: 머리말·꼬리말 제거, 표 숫자 붙이기, 캡션 청크, has_table, 엄격한 has_math
 LAYOUT_RULES = os.getenv("LAYOUT_RULES", "on") == "on"
 PDF_READER = os.getenv("PDF_READER", "pypdf")  # pypdf(BSD) | pymupdf(AGPL, 비교 실험용)
+
+# ---- Zotero 그룹 (논문 라이브러리의 원천, app/data) ----
+# 그룹은 ZOTERO_TEAM_ID 한 팀에만 연결한다. 키는 로그·응답·예외 메시지에 넣지 않는다
+ZOTERO_GROUP_ID = _optional_int("ZOTERO_GROUP_ID")
+ZOTERO_API_KEY = (os.getenv("ZOTERO_API_KEY") or "").strip() or None
+ZOTERO_TEAM_ID = _optional_int("ZOTERO_TEAM_ID") or int(os.getenv("LOCAL_TEAM_ID", "3"))
+ZOTERO_CACHE_SECONDS = int(os.getenv("ZOTERO_CACHE_SECONDS", "30"))  # 논문 목록 캐시. 쓰기 뒤에는 바로 비운다
 EMBEDDING_BACKEND = os.getenv("EMBEDDING_BACKEND", "local")  # local(sentence-transformers) | openai
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")  # 30문항 비교 1위: MRR 0.740 (3-small 0.664, 3-large 0.539)
+
+# ---- 선행연구 후보 검색 (app/data, /search-topic) ----
+# 후보의 관련도 = 주제 질의와 '제목+초록'의 bge-m3 코사인. 아래 값 미만은 low_relevance 경고만 붙이고 막지는 않는다
+TOPIC_MIN_RELEVANCE = float(os.getenv("TOPIC_MIN_RELEVANCE", "0.50"))  # 0.45→0.50: arXiv 후보 40건(질의 4개) 점수 0.43~0.74, 무관한 결과 0.43·0.47, 관련 결과 ≥0.53. 표본이 작아 후보가 쌓이면 다시 본다
+TOPIC_CACHE_SECONDS = int(os.getenv("TOPIC_CACHE_SECONDS", "600"))  # 검색한 후보를 /upload-topic이 다시 쓰도록 보관하는 시간

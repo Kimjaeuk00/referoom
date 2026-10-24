@@ -136,6 +136,25 @@ def index_version(team_id: int) -> int:
     return int(idx.meta["index_version"]) if idx else 0
 
 
+def paper_chunk_counts(team_id: int) -> dict[int, int]:
+    """논문별 색인된 청크 수 {paper_id: 개수}. 색인이 없으면 {}. 라이브러리 목록의 색인 여부 판단에 쓴다."""
+    idx = _load(team_id)
+    counts: dict[int, int] = {}
+    for chunk in idx.chunks if idx else []:
+        paper_id = chunk["metadata"].get("paper_id")
+        if type(paper_id) is int:
+            counts[paper_id] = counts.get(paper_id, 0) + 1
+    return counts
+
+
+def paper_ids_with_meta(team_id: int, field: str) -> set[int]:
+    """청크 메타데이터에 `field`가 있는 논문 id. 어떤 경로로 색인했는지 구분할 때 쓴다
+    (예: zotero_key가 있으면 Zotero 동기화로 색인한 논문)."""
+    idx = _load(team_id)
+    return {c["metadata"]["paper_id"] for c in (idx.chunks if idx else [])
+            if c["metadata"].get(field) not in (None, "") and type(c["metadata"].get("paper_id")) is int}
+
+
 def readiness() -> dict:
     with _lock:
         return {"embedder": True, "stores_loaded": sum(1 for v in _cache.values() if v is not None)}

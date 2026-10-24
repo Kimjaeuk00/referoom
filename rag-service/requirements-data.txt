@@ -1,6 +1,5 @@
 # PDF extraction
 pypdf>=4.0
-PyMuPDF==2.0
 
 # Upload API
 fastapi>=0.110,<1.0

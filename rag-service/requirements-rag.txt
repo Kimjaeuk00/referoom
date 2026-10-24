@@ -1,6 +1,7 @@
 # RAG 서비스(app/rag) 실행·테스트용 의존성. 데이터 파트의 requirements와 합칠 때 버전 충돌만 확인한다.
 fastapi>=0.110,<1.0
 uvicorn[standard]>=0.29,<1.0
+python-multipart>=0.0.9   # PDF 업로드(/upload-paper) 폼 파싱
 pydantic>=2.11,<3.0
 python-dotenv>=1.0
 httpx>=0.27,<1.0

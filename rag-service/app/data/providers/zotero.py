@@ -1,16 +1,20 @@
 """Zotero 그룹 조회 및 arXiv 논문 등록. PDF는 메모리로 전달합니다."""
 
 import asyncio
+import contextlib
 import hashlib
+import io
 import uuid
 import re
 import time
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from pathlib import Path
 from typing import Any
 
 import httpx
 from pydantic import BaseModel
+from pypdf import PdfReader
 
 
 class ZoteroError(RuntimeError):
@@ -48,6 +52,61 @@ def parse_paper(item: dict[str, Any]) -> ZoteroPaper | None:
         doi=data.get("DOI") or None, url=data.get("url") or None,
         tags=[tag["tag"] for tag in data.get("tags", [])],
     )
+
+MAX_PAGES = 80
+_PAPER_TYPES = {"journalArticle", "preprint", "conferencePaper"}
+_ARXIV_ID = r"(?:\d{4}\.\d{4,5}|[A-Za-z][A-Za-z0-9.-]*/\d{7})"
+# Zotero 앱이 붙이는 'arXiv:1902.00751 [cs.LG]'와 이 서비스가 붙이는 'arXiv: 2306.05212'를 모두 인식합니다.
+_EXTRA_ARXIV = re.compile(rf"^\s*arXiv:\s*({_ARXIV_ID})(?:v\d+)?(?=\s|$)", re.I)
+_URL_ARXIV = re.compile(rf"^https?://(?:www\.)?arxiv\.org/(?:abs|pdf)/({_ARXIV_ID})(?:v\d+)?(?:\.pdf)?/?$", re.I)
+_DOI_ARXIV = re.compile(rf"^10\.48550/arxiv\.({_ARXIV_ID})(?:v\d+)?$", re.I)
+
+
+def arxiv_id_of(data: dict[str, Any]) -> str | None:
+    """Zotero 항목 데이터에서 arXiv ID(버전 제외)를 찾습니다. extra 줄 → url → DOI 순입니다."""
+    for line in (data.get("extra") or "").splitlines():
+        match = _EXTRA_ARXIV.match(line)
+        if match:
+            return match.group(1)
+    for pattern, value in ((_URL_ARXIV, data.get("url")), (_DOI_ARXIV, data.get("DOI"))):
+        match = pattern.match((value or "").strip())
+        if match:
+            return match.group(1)
+    return None
+
+
+def page_count(pdf: bytes) -> int:
+    """PDF 쪽수. 읽을 수 없으면 ValueError."""
+    try:
+        return len(PdfReader(io.BytesIO(pdf)).pages)
+    except Exception:
+        raise ValueError("PDF를 읽을 수 없습니다.") from None
+
+
+def _is_pdf_attachment(data: dict[str, Any]) -> bool:
+    return (data.get("itemType") == "attachment" and data.get("contentType") == "application/pdf"
+            and data.get("linkMode") in {"imported_file", "imported_url"})
+
+
+def managed_pdf_pattern(arxiv_id: str) -> re.Pattern:
+    """save_arxiv_paper가 올리는 첨부 파일명 (예: 1902.00751v2.pdf)."""
+    return re.compile(re.escape(arxiv_id.replace("/", "_")) + r"v\d+\.pdf")
+
+
+def _managed_pdf_name(candidate) -> re.Pattern:
+    return managed_pdf_pattern(candidate.candidate_id)
+
+
+def pick_pdf_attachment(attachments: list[dict], arxiv_id: str | None = None) -> dict | None:
+    """색인할 PDF 첨부 하나. 파일이 저장 완료된(md5 있는) 것만 보고, 첨부가 여러 개면
+    Referoom 파일명을 우선하고 없으면 첫 번째를 씁니다. 없으면 None."""
+    stored = [item for item in attachments if item["data"].get("md5")]
+    if arxiv_id:
+        pattern = managed_pdf_pattern(arxiv_id)
+        for item in stored:
+            if pattern.fullmatch(item["data"].get("filename", "")):
+                return item
+    return stored[0] if stored else None
 
 
 class ZoteroProvider:
@@ -187,9 +246,23 @@ class ZoteroProvider:
 
     async def get_pdf_attachments(self, paper_key: str) -> list[dict]:
         children, _ = await self._items(f"/items/{self._key(paper_key)}/children")
-        return [item for item in children if item["data"].get("itemType") == "attachment"
-                and item["data"].get("contentType") == "application/pdf"
-                and item["data"].get("linkMode") in {"imported_file", "imported_url"}]
+        return [item for item in children if _is_pdf_attachment(item["data"])]
+
+    async def list_library(self) -> tuple[list[dict], dict[str, list[dict]], int]:
+        """휴지통을 뺀 논문 항목, 부모 키별 PDF 첨부, 라이브러리 버전.
+
+        항목 전체를 한 번에 조회해 논문마다 자식을 따로 부르지 않습니다. 부모 논문이 없는 첨부는 버립니다.
+        """
+        items, version = await self._items("/items")
+        papers = [item for item in items if item["data"].get("itemType") in _PAPER_TYPES
+                  and "parentItem" not in item["data"] and not item["data"].get("deleted")]
+        keys = {paper["key"] for paper in papers}
+        attachments: dict[str, list[dict]] = {}
+        for item in items:
+            data = item["data"]
+            if data.get("parentItem") in keys and _is_pdf_attachment(data) and not data.get("deleted"):
+                attachments.setdefault(data["parentItem"], []).append(item)
+        return papers, attachments, version
 
     async def get_annotations(self, attachment_key: str) -> list[dict]:
         """P1: annotationText/Comment/PageLabel 등 원본 필드를 반환합니다."""
@@ -276,10 +349,51 @@ class ZoteroProvider:
             raise ZoteroError(f"PDF 저장소 업로드 실패 (HTTP {response.status_code})")
         await self._write("POST", path, headers=condition, data={"upload": auth["uploadKey"]}, expected=(204,))
 
+    async def trash_item(self, key: str) -> None:
+        """항목을 휴지통으로 옮깁니다(Zotero에서 복구 가능). 자식 첨부는 따로 옮기지 않습니다."""
+        item = await self.get_item(key)
+        if item["data"].get("deleted"):
+            return
+        await self._write("PATCH", f"/items/{self._key(key)}", expected=(204,),
+                          headers={"If-Unmodified-Since-Version": str(item["version"])}, json={"deleted": 1})
+
+    async def save_pdf(self, pdf: bytes, filename: str, *, title: str | None = None,
+                       tags: list[str] | None = None) -> dict:
+        """사용자가 올린 PDF를 새 논문 항목으로 등록합니다(extra에 'Referoom-Upload'). 중복 검사는 호출 측 책임입니다.
+
+        첨부 업로드가 실패하면 만든 논문 항목을 휴지통으로 옮겨 빈 항목이 남지 않게 합니다.
+        """
+        name = Path(filename).name
+        if not name.lower().endswith(".pdf"):
+            raise ValueError("PDF 파일명이 필요합니다.")
+        if not pdf.startswith(b"%PDF-") or len(pdf) > 20 * 1024 * 1024:
+            raise ValueError("20MB 이하의 PDF 데이터가 필요합니다.")
+        if await asyncio.to_thread(page_count, pdf) > MAX_PAGES:
+            raise ValueError("PDF는 최대 80페이지까지 등록할 수 있습니다.")
+        tag_names = list(dict.fromkeys(tag.strip() for tag in tags or [] if tag.strip()))
+        async with self._import_lock:
+            key = await self._create("/items", {"itemType": "preprint", "title": (title or name[:-4]).strip() or name,
+                                                "tags": [{"tag": tag} for tag in tag_names], "extra": "Referoom-Upload"})
+            try:
+                attachment_key = await self._create("/items", {
+                    "itemType": "attachment", "parentItem": key, "linkMode": "imported_file",
+                    "title": name, "filename": name, "contentType": "application/pdf"})
+                await self.upload_pdf(attachment_key, pdf, name)
+            except Exception:
+                with contextlib.suppress(Exception):
+                    await self.trash_item(key)
+                raise
+        return {"paper_key": key, "attachment_key": attachment_key, "md5": hashlib.md5(pdf).hexdigest()}
+
     async def save_arxiv_paper(self, candidate, arxiv_provider, *,
                                collection_name: str = "arXiv 수집",
                                pinned_version: str | None = None) -> dict:
         """사용자가 선택한 후보 1편을 등록합니다. 후보 검색이나 색인은 실행하지 않습니다.
+
+        status: saved(등록·갱신, "pdf"에 올린 PDF 바이트) | kept("pdf"는 None).
+        kept는 Zotero에 더 최신 버전이 있거나, Zotero 앱에서 직접 넣은 논문에 이미 PDF가 있을 때입니다
+        (arXiv ID는 extra·url·DOI로 판정). 이 경우 새 첨부를 올리지 않고 직접 넣은 PDF를 씁니다.
+        시드·평가 논문처럼 pinned_version을 주면 그 버전을 올리며, 직접 추가한 항목의 제목·저자는 덮어쓰지 않습니다.
 
         실패 시 이미 생성된 논문/첨부는 남기고 재시도에 재사용합니다. 서로 다른
         프로세스의 동시 등록은 호출 측의 팀별 락으로 직렬화해야 합니다.
@@ -293,24 +407,28 @@ class ZoteroProvider:
         marker = f"arXiv: {candidate.candidate_id}"
         async with self._import_lock:
             items, _ = await self._items("/items/top")
-            matches = [item for item in items if marker in item["data"].get("extra", "").splitlines()
-                       or re.fullmatch(r"https?://arxiv\.org/abs/" + re.escape(candidate.candidate_id) + r"(?:v\d+)?/?",
-                                       item["data"].get("url", ""))]
+            matches = [item for item in items if arxiv_id_of(item["data"]) == candidate.candidate_id]
             if len(matches) > 1:
                 raise ZoteroError("같은 arXiv 논문이 여러 개 있습니다. Zotero에서 중복을 정리하세요.")
             paper = matches[0] if matches else None
+            extra_lines = paper["data"].get("extra", "").splitlines() if paper else []
+            recorded = next((m[1] for m in (re.fullmatch(r"Referoom-Version: (v\d+)", line) for line in extra_lines) if m), None)
+            ours = paper is None or marker in extra_lines or recorded is not None
             if paper:
-                version = re.search(r"^Referoom-Version: (v\d+)$", paper["data"].get("extra", ""), re.M)
-                if version and pinned_version is not None and version[1] != pinned_version:
+                if recorded and pinned_version is not None and recorded != pinned_version:
                     raise ValueError("Zotero에 저장된 버전이 평가 고정 버전과 다릅니다.")
-                if version and _version_number(version[1]) > incoming:
-                    return {"paper_key": paper["key"], "status": "kept"}
+                if recorded and _version_number(recorded) > incoming:
+                    return {"paper_key": paper["key"], "status": "kept", "pdf": None}
+                if not ours and pinned_version is None:
+                    managed = _managed_pdf_name(candidate)
+                    manual = next((a for a in await self.get_pdf_attachments(paper["key"]) if a["data"].get("md5")
+                                   and not managed.fullmatch(a["data"].get("filename", ""))), None)
+                    if manual is not None:
+                        return {"paper_key": paper["key"], "attachment_key": manual["key"], "status": "kept", "pdf": None}
             # 원격 쓰기 전에 다운로드와 문서 제한을 검증합니다.
             pdf = await arxiv_provider.download_pdf_bytes(candidate)
-            import pymupdf
-            with pymupdf.open(stream=pdf, filetype="pdf") as document:
-                if document.page_count > 80:
-                    raise ValueError("PDF는 최대 80페이지까지 등록할 수 있습니다.")
+            if await asyncio.to_thread(page_count, pdf) > MAX_PAGES:
+                raise ValueError("PDF는 최대 80페이지까지 등록할 수 있습니다.")
             collection = await self.ensure_collection(collection_name)
             metadata = {"itemType": "preprint", "title": candidate.title,
                         "abstractNote": candidate.abstract, "date": str(candidate.year),
@@ -324,12 +442,11 @@ class ZoteroProvider:
             attachments = await self.get_pdf_attachments(key)
             # 업로드된 파일은 생략하고, 중단된 첨부 항목도 재사용합니다.
             attachment = next((item for item in attachments if item["data"].get("filename") == filename), None)
-            if attachment is None and paper:
-                managed = [item for item in attachments if re.fullmatch(
-                    re.escape(candidate.candidate_id.replace("/", "_")) + r"v\d+\.pdf",
-                    item["data"].get("filename", ""))]
-                if len(managed) == 1:
-                    attachment = managed[0]
+            if attachment is None:
+                managed = _managed_pdf_name(candidate)
+                managed_items = [item for item in attachments if managed.fullmatch(item["data"].get("filename", ""))]
+                if len(managed_items) == 1:
+                    attachment = managed_items[0]
             digest = hashlib.md5(pdf).hexdigest()
             if attachment is None:
                 attachment_key = await self._create("/items", {
@@ -346,17 +463,19 @@ class ZoteroProvider:
                 await self._write("PATCH", f"/items/{attachment_key}", expected=(204,),
                     headers={"If-Unmodified-Since-Version": str(current_attachment["version"])},
                     json={"title": filename})
-            # PDF登録成功後にだけ完了バージョンを記録します。既存タグ等は保持します。
+            # PDF 등록이 끝난 뒤에만 완료 버전을 기록합니다. 기존 태그 등은 보존합니다.
             paper = await self.get_item(key)
             data = paper["data"]
-            extra = [line for line in data.get("extra", "").splitlines()
-                     if not line.startswith("Referoom-Version:") and line != marker]
-            extra.extend([marker, f"Referoom-Version: {candidate.version}"])
+            extra = [line for line in data.get("extra", "").splitlines() if not line.startswith("Referoom-Version:")]
+            if not any(arxiv_id_of({"extra": line}) == candidate.candidate_id for line in extra):
+                extra.append(marker)
+            extra.append(f"Referoom-Version: {candidate.version}")
             if candidate.doi and not any(line.startswith("DOI:") for line in extra):
                 extra.append(f"DOI: {candidate.doi}")
+            patch = {"extra": "\n".join(extra),
+                     "collections": list(dict.fromkeys([*data.get("collections", []), collection]))}
             await self._write("PATCH", f"/items/{key}", expected=(204,),
                 headers={"If-Unmodified-Since-Version": str(paper["version"])},
-                json={**metadata, "extra": "\n".join(extra),
-                      "collections": list(dict.fromkeys([*data.get("collections", []), collection]))})
+                json={**metadata, **patch} if ours else patch)
             return {"paper_key": key, "attachment_key": attachment_key,
-                    "collection_key": collection, "status": "saved", "version": candidate.version}
+                    "collection_key": collection, "status": "saved", "version": candidate.version, "pdf": pdf}

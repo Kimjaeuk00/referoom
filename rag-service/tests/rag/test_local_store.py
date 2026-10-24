@@ -249,3 +249,23 @@ def test_seed_meta_has_authors():
 def test_add_paper_puts_authors_in_every_chunk(service_dirs):
     store.add_paper(3, 1, b"page one text|page two text", {"source": "A", "authors": "Kim, Lee"})
     assert {h.metadata["authors"] for h in store.search(3, ["pdf"], "text", k=10)} == {"Kim, Lee"}
+
+
+def test_paper_chunk_counts(index_dir):
+    assert store.paper_chunk_counts(3) == {}  # 색인 없음
+    meta = build(index_dir, PAPERS)
+    counts = store.paper_chunk_counts(3)
+    assert set(counts) == {1, 2} and sum(counts.values()) == meta["chunk_count"]
+    assert counts[1] == 2 and counts[2] == 1
+    assert store.paper_chunk_counts(4) == {}  # 다른 팀은 보이지 않음
+
+
+def test_paper_ids_with_meta(index_dir):
+    chunks = []
+    for pid, extra in ((1, {"zotero_key": "ABCD2345"}), (2, {}), (3, {"zotero_key": ""})):
+        base = {"team_id": 3, "paper_id": pid, "source": f"p{pid}", "type": "body", "tags": "x", "url": "u", **extra}
+        chunks += ingest.chunk_pages([(1, f"text of paper {pid}")], base)
+    ingest.save_index(index_dir / "3", chunks, embedder.embed_documents([c["text"] for c in chunks]), {"team_id": 3})
+    store.reload()
+    assert store.paper_ids_with_meta(3, "zotero_key") == {1}  # 비어 있거나 없는 값은 제외
+    assert store.paper_ids_with_meta(3, "nope") == set() and store.paper_ids_with_meta(4, "zotero_key") == set()
