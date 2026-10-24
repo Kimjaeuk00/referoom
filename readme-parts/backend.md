@@ -126,17 +126,19 @@ mariadb --host="$DB_HOST" --port="$DB_PORT" --user="$DB_USER" \
 
 시드가 필요한 개발 DB에서만 같은 방식으로 `900_dev_seed.sql`을 별도 적용한다. 001·002는 재실행용 `IF NOT EXISTS` 스크립트가 아니며, SQL 파일은 현재 실제 DB에 실행해 검증한 상태가 아니다.
 
-현재 시드 정의는 다음과 같다. 공통 비밀번호 `Demo-pass-1234!`와 초대 코드 `RFDEV234`는 공개된 개발용 값이며 실제 서비스 자격 증명이 아니다.
+시드 파일은 **개발팀·R&D팀 각각 관리자와 팀원 1명씩, 미가입 계정 1명을 포함한 2팀·5계정**으로 구성한다. 공통 비밀번호 `Demo-pass-1234!`, 개발팀 초대 코드 `RFDEV234`, R&D팀 초대 코드 `RFRND234`는 공개된 개발용 값이며 실제 서비스 자격 증명이 아니다. SQL 파일 수정만 완료한 상태로, 실제 DB 적용·로그인 검증은 아직 하지 않았다.
 
 | 계정 | 역할 | 소속 | 수준 |
 |---|---|---|---|
 | `demo_admin` | `team_admin` | 개발 데모팀(`dev`) | `L2` |
 | `demo_member` | `member` | 같은 개발 데모팀 | `L1` |
+| `demo_rnd_admin` | `team_admin` | R&D 데모팀(`rnd`) | `L3` |
+| `demo_rnd_member` | `member` | 같은 R&D 데모팀 | `L2` |
 | `demo_solo` | `member` | 없음 | `L2` |
 
 기존 아이디·코드는 덮어쓰지 않으며 ID는 자동 생성된다. 초대 코드 재발급 후 시드를 재실행하면 고정 코드의 팀이 추가될 수 있으므로 반복 초기화 용도로 사용하지 않는다.
 
-**요구서의 개발팀·R&D팀 각 2계정 구성과 달리, 현재 시드는 1팀·3계정이다.** 팀 격리 E2E에는 다른 팀의 계정을 추가로 준비해야 하며 `demo_solo`를 그대로 사용하면 안 된다. 논문 적재는 데이터 담당 작업이다.
+모든 시드 계정의 `view_pref`는 NULL이며 개발팀의 기본 관점은 `dev`, R&D팀의 기본 관점은 `rnd`다. `demo_solo`는 미가입 기본 관점 `dev`를 사용한다. 팀 격리 E2E는 개발팀의 `demo_admin`과 R&D팀의 `demo_rnd_admin`을 사용할 수 있다. 데이터 담당자가 주 데모 논문을 개발팀에만 적재하고 R&D팀 라이브러리는 비워 둔다. `demo_solo`는 팀 미가입 권한 점검용이며 다른 팀 계정을 대신하지 않는다.
 
 전체 Compose에서 DB 초기화 디렉터리를 마운트할 때는 배포 담당이 DB 생성 이름, 파일 순서와 900의 개발 환경 한정을 맞춘다. 초기화 스크립트는 빈 DB 볼륨에서만 자동 적용되며 기존 볼륨을 재시작한다고 다시 실행되지 않는다.
 
@@ -386,7 +388,7 @@ DB 중지 시 503은 별도 격리된 테스트 DB에서 확인한다. 기존 �
 
 - Java `/api/health`와 RAG `/health`가 정상이어야 한다.
 - 주 계정은 팀에 가입하고, 지정한 PDF가 그 팀에만 적재되어 있어야 한다.
-- 다른 계정은 반드시 다른 팀에 가입해야 한다. 현재 시드의 `demo_solo`는 대체 계정이 아니다.
+- 시드를 적용한 테스트 DB라면 주 계정은 개발팀 `demo_admin`, 다른 팀 계정은 R&D팀 `demo_rnd_admin`을 사용한다. 두 계정의 실제 소속도 확인한다. `demo_solo`는 미가입 계정이므로 팀 격리 계정을 대신할 수 없다.
 - 실제 숫자 paper ID, 그 논문에서 답할 수 있는 질문, 전체 라이브러리 밖 질문을 준비한다.
 - common-py 적용과 실제 저장소·LLM 준비를 끝내고, 아래 자리표시자를 실제 테스트 값으로 바꾼다. JWT_SECRET을 이 스크립트에 줄 필요는 없다.
 
@@ -397,7 +399,7 @@ export AUTH_URL=http://localhost:8080
 export RAG_URL=http://localhost:8001
 export TIMEOUT_SECONDS=60
 export E2E_USERNAME=demo_admin
-export E2E_OTHER_USERNAME='다른_팀_계정으로_교체'
+export E2E_OTHER_USERNAME=demo_rnd_admin
 export E2E_PAPER_ID='실제_숫자_ID로_교체'
 export E2E_QUESTION='지정한 논문에서 답할 수 있는 실제 질문으로 교체'
 export E2E_OUT_OF_SCOPE_QUESTION='라이브러리 전체에 근거가 없는 실제 질문으로 교체'
@@ -470,7 +472,7 @@ python3 scripts/ops_report.py /tmp/referoom-rag.log \
 
 **남은 작업**
 
-- 새 DB에 001·002·900을 실제 적용해 JPA 매핑과 기동 확인. 요구서의 별도 R&D팀·계정 시드 보완.
+- 별도의 새 DB에 001·002·900을 실제 적용해 JPA 매핑·기동, 2팀·5계정 생성, 각 계정의 로그인·역할·소속과 미가입 상태를 확인. 시드 구성 보완은 완료했으며 실제 DB 적용은 아직 하지 않았다.
 - RAG·데이터·음성 담당자가 common-py를 자신의 앱·오류·권한·로그에 적용하고 실제 저장소와 연결.
 - 실제 PDF·두 팀 계정으로 `scripts/e2e_check.sh` 실행. 현재 필수 1~5단계의 실제 RAG 통합 PASS 기록은 없다.
 - 실제 서비스 로그로 `scripts/ops_report.py` 실행하여 지연·토큰·비용·로그 점검 결과 확보. 현재 실제 로그 실행은 하지 않았다.
