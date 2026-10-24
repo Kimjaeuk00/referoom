@@ -8,6 +8,10 @@
 // 질문으로 시나리오 고르기(/rag-query):
 //   기본 → LoRA 답변(출처 2개) / "어텐션"·"수식" → needs_review / "DoRA"·"VeRA"(라이브러리에 없을 때)·"없는" → handoff
 //   "503" → NOT_READY / "타임아웃" → UPSTREAM_TIMEOUT / "401" → TOKEN_EXPIRED / "느린" → 12초 지연 / "xss" → sanitize 확인
+// 새 모드(선행연구·주제·검증, PRD v0.2 8절): 입력·힌트·원고 어디에 써도 같은 키워드가 통한다.
+//   선행연구(/rag-query mode=prior): 정리표(table) 포함 / 주제(/topic-suggest): 후보 4개, 대상 논문 1~10편 / 검증(/verify): 판정 5종
+//   "없는" → handoff / "503"·"타임아웃"·"401"·"느린"·"xss"는 위와 같다 / 검증에 "DoRA"를 쓰면 모든 주장이 근거 없음(handoff)
+//   주제는 QLoRA만 고르면 한계 서술이 없어 handoff(PRD: 한계 근거 0건)
 // PDF 이름: dup → 409, scan → 배치에서 "텍스트 추출 불가(스캔 PDF)"로 실패. 주제 검색어 zzz → 후보 0건.
 import { decodeJwt, isExpired } from '@/lib/jwt'
 
@@ -392,6 +396,7 @@ function ragQuery({ body, claims }) {
   const handoff = [200, { ...meta, answer: '팀 라이브러리에서 관련 내용을 찾을 수 없습니다.', sources: [], source_details: [], needs_review: false, handoff: true }, delay]
 
   if (teamPapers(claims).every((p) => p.status !== 'indexed') || /없는/.test(question)) return handoff
+  if (body.mode === 'prior') return priorQuery({ body, claims, meta, handoff, delay })
   if (/dora/i.test(question)) {
     if (!inLibrary(claims, '2402.09353')) return handoff
     const dora = papers.find((p) => p.arxiv_id === '2402.09353' && p.team_id === claims.team_id)
@@ -422,6 +427,130 @@ function ragQuery({ body, claims }) {
   ]
   const answer = `${LORA_BY_LEVEL[level] ?? LORA_BY_LEVEL.L2}\n\n${LORA_BY_VIEW[view] ?? LORA_BY_VIEW.dev}`
   return [200, { ...meta, answer, sources: sourcesOf(details), source_details: details, needs_review: false, handoff: false }, delay]
+}
+
+// ---------- 선행연구·주제·검증 (PRD v0.2 8절, 서버 구현 전이라 mock으로 먼저 만든다) ----------
+function scenarioError(text) {
+  if (text.includes('503')) return aiError(503, 'NOT_READY', '인덱스 준비 중')
+  if (text.includes('타임아웃')) return aiError(503, 'UPSTREAM_TIMEOUT', 'LLM timeout')
+  if (text.includes('401')) return aiError(401, 'TOKEN_EXPIRED', '토큰 만료')
+  return null
+}
+const modeDelay = (text, min, max) => (text.includes('느린') ? 12_000 : between(min, max))
+// ids가 배열이면 그 논문 중 색인된 것만, 아니면 팀의 색인된 논문 전체
+const indexedPapers = (claims, ids) => (Array.isArray(ids) ? ids.map((id) => findPaper(claims, id)) : teamPapers(claims)).filter((p) => p?.status === 'indexed')
+
+// 논문별로 정리표 칸을 채울 내용 (arXiv ID로 찾는다). null인 칸은 화면에서 '논문에 명시되지 않음'으로 보인다.
+const PRIOR_FACTS = {
+  '2106.09685': { problem: '대형 모델 전체 미세조정의 학습·저장 비용', method: '사전학습 가중치를 고정하고 저랭크 행렬 B, A만 학습', dataset: 'GLUE, E2E NLG, WikiSQL', metric: 'GLUE 평균, BLEU', result: 'GPT-3 175B에서 학습 파라미터를 약 10,000분의 1로 줄이고도 전체 미세조정과 비슷한 성능', limitation: '어느 층에 붙일지와 랭크 r을 실험으로 정해야 한다', page: 4 },
+  '2305.14314': { problem: '65B 모델 미세조정에 필요한 GPU 메모리', method: '4비트 NormalFloat 양자화에 LoRA를 더하고 이중 양자화·페이징 옵티마이저 사용', dataset: 'MMLU, Vicuna 벤치마크', metric: '정확도, Elo', result: '65B 모델을 48GB GPU 한 장에서 학습하면서 16비트 미세조정 성능 유지', limitation: null, page: 3 },
+  '1706.03762': { problem: '순환 구조 없이 긴 문장을 병렬로 처리', method: '셀프 어텐션만으로 인코더·디코더를 구성', dataset: 'WMT 2014 영-독, 영-불', metric: 'BLEU', result: '영-독 28.4 BLEU로 당시 최고 성능, 학습 비용은 더 낮음', limitation: '어텐션 비용이 시퀀스 길이의 제곱에 비례한다', page: 6 },
+  '2005.11401': { problem: '지식 집약 과제에서 모델 파라미터만으로는 최신·정확한 지식이 부족', method: '검색기로 찾은 문서를 생성기에 함께 넣는 RAG', dataset: 'Natural Questions, TriviaQA', metric: 'Exact Match', result: '개방형 질의응답에서 파라미터만 쓰는 모델보다 높은 성능', limitation: null, page: 5 },
+  '2310.11454': { problem: 'LoRA보다 학습 파라미터를 더 줄이고 싶다', method: '모든 층이 공유하는 무작위 행렬은 고정하고 층별 스케일 벡터만 학습', dataset: 'GLUE, E2E', metric: 'GLUE 평균', result: 'LoRA 대비 학습 파라미터를 10배 이상 줄이고 비슷한 성능', limitation: '큰 모델에서의 검증이 제한적이다', page: 2 },
+  '2402.09353': { problem: 'LoRA와 전체 미세조정 사이의 성능 격차', method: '가중치를 크기와 방향으로 나누고 방향에만 LoRA 적용', dataset: 'Commonsense reasoning 8종', metric: '정확도', result: 'LoRA보다 평균 정확도가 높고 추론 비용은 같다', limitation: '크기 성분 학습이 추가 메모리를 쓴다', page: 3 },
+}
+const GENERIC_FACTS = { problem: '논문이 풀려는 문제 요약(목업)', method: '핵심 방법 요약(목업)', dataset: null, metric: null, result: '주요 결과 요약(목업)', limitation: null, page: 2 }
+const factsOf = (paper) => PRIOR_FACTS[paper.arxiv_id] ?? GENERIC_FACTS
+const shortTitle = (paper) => paper.title.split(':')[0]
+
+function priorQuery({ body, claims, meta, handoff, delay }) {
+  const ids = body.scope?.type === 'paper' ? body.scope.ids : null
+  const targets = Array.isArray(ids) ? indexedPapers(claims, ids).slice(0, 10) : indexedPapers(claims).slice(0, 3)
+  if (!targets.length) return handoff
+  const details = []
+  let n = 0
+  const rows = targets.map((paper) => {
+    const facts = factsOf(paper)
+    const labels = {}
+    for (const key of ['method', 'result', 'limitation']) {
+      if (!facts[key]) continue
+      labels[key] = `S${++n}`
+      details.push(detail(paper.id, labels[key], facts.page, facts[key]))
+    }
+    return { paper_id: paper.id, title: paper.title, problem: facts.problem, method: facts.method, dataset: facts.dataset, metric: facts.metric, result: facts.result, limitation: facts.limitation, labels }
+  })
+  const list = rows.map((r) => `- **${shortTitle(r)}**: ${r.method}${r.labels.method ? ` [${r.labels.method}]` : ''}`).join('\n')
+  const answer = `선택한 ${rows.length}편을 방법과 주요 결과 기준으로 정리했어요.\n\n${list}\n\n칸마다 근거가 된 쪽수를 달았어요. 자세한 비교는 아래 정리표를 보세요.`
+  const needsReview = rows.some((r) => /\d/.test(r.result ?? ''))
+  return [200, { ...meta, answer, sources: sourcesOf(details), source_details: details, needs_review: needsReview, handoff: false, table: rows }, delay]
+}
+
+function topicSuggest({ body, claims }) {
+  const ids = body?.paper_ids
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 10 || !ids.every(Number.isInteger)) return aiError(422, 'VALIDATION_ERROR', '대상 논문은 1~10편이어야 합니다.')
+  const hint = String(body.hint ?? '')
+  const failed = scenarioError(hint)
+  if (failed) return failed
+  const view = body.view ?? claims.view ?? 'dev'
+  const delay = modeDelay(hint, 3000, 4500)
+  const handoff = [200, { limitations: [], topics: [], sources: [], source_details: [], needs_review: false, handoff: true, view, latency_ms: delay }, delay]
+  const targets = indexedPapers(claims, ids).filter((p) => factsOf(p).limitation) // 한계 서술이 있는 논문만 근거가 된다
+  if (!targets.length || /없는/.test(hint)) return handoff
+
+  const details = []
+  const limitations = targets.map((paper, i) => {
+    const facts = factsOf(paper)
+    const label = `S${i + 1}`
+    details.push(detail(paper.id, label, facts.page + 4, facts.limitation))
+    return { label, paper_id: paper.id, title: paper.title, page: facts.page + 4, summary: facts.limitation }
+  })
+  const pick = (...indexes) => [...new Set(indexes.map((i) => limitations[i % limitations.length].label))]
+  const other = indexedPapers(claims).find((p) => !ids.includes(p.id))
+  const evil = /xss/i.test(hint)
+  const templates = [
+    { perspective: 'limitation_fix', title: evil ? '<script>alert("xss")</script> 층별 중요도에 따른 동적 랭크 할당' : '층별 중요도에 따른 동적 랭크 할당', question: evil ? '<img src=x onerror="alert(1)"> 랭크를 고정하지 않고 층마다 다르게 두면 어떻게 되는가?' : '랭크를 고정하지 않고 층마다 다르게 배분하면 같은 파라미터 예산에서 성능이 오르는가?', approach: '학습 중 층별 기여도를 측정해 랭크를 늘리거나 줄인다.', experiment: { datasets: ['GLUE', 'E2E NLG'], baselines: ['LoRA', '고정 랭크 r=8'], metrics: ['평균 점수', '학습 파라미터 수'] }, based_on: pick(0), similar: other },
+    { perspective: 'combine', title: '양자화와 구조화된 어댑터의 결합', question: '서로 다른 두 방법의 장점을 합치면 각각의 한계를 함께 줄일 수 있는가?', approach: '한쪽 논문의 메모리 절감 기법을 다른 쪽 논문의 적응 구조에 적용한다.', experiment: { datasets: ['MMLU'], baselines: ['각 방법 단독'], metrics: ['정확도', 'GPU 메모리'] }, based_on: pick(0, 1) },
+    { perspective: 'extend', title: '다국어·저자원 도메인으로의 일반화 검증', question: '영어 벤치마크에서 확인된 성능이 다른 언어와 도메인에서도 유지되는가?', approach: '한국어·의료 문서 같은 저자원 도메인에 같은 설정을 적용해 성능 하락 원인을 분석한다.', experiment: { datasets: ['KLUE', '의료 QA'], baselines: ['전체 미세조정'], metrics: ['정확도', 'F1'] }, based_on: pick(1) },
+    { perspective: 'efficiency', title: '추론 지연 없이 학습 비용을 더 줄이는 방법', question: '학습 단계의 메모리와 시간을 줄이면서도 배포 시 지연이 늘지 않게 할 수 있는가?', approach: '학습 중에만 쓰는 보조 구조를 두고 배포 전에 원래 가중치에 합친다.', experiment: { datasets: ['GLUE'], baselines: ['LoRA'], metrics: ['학습 시간', '피크 메모리', '추론 지연'] }, based_on: pick(0, 1) },
+  ]
+  const topics = templates.slice(0, Math.min(Math.max(Number(body.n) || 4, 1), 4)).map(({ similar, ...t }) => ({
+    ...t,
+    similar_papers: similar && t.perspective === 'limitation_fix' ? [{ paper_id: similar.id, title: similar.title, score: 0.71 }] : [],
+    ai_generated: true,
+  }))
+  return [200, { limitations, topics, sources: sourcesOf(details), source_details: details, needs_review: true, handoff: false, view, latency_ms: delay }, delay]
+}
+
+const claim = (fields) => ({ sentence: '', subject: null, metric: null, claimed_value: null, dataset: null, found_value: null, condition: null, verdict: 'not_found', labels: [], delta: null, ...fields })
+
+function verifyManuscript({ body, claims }) {
+  const text = String(body?.text ?? '').trim()
+  if (text.length < 10 || text.length > 3000) return aiError(422, 'VALIDATION_ERROR', '원고는 10~3000자여야 합니다.')
+  if (body.paper_ids != null && !(Array.isArray(body.paper_ids) && body.paper_ids.every(Number.isInteger))) return aiError(422, 'VALIDATION_ERROR', '대상 논문 형식이 올바르지 않습니다.')
+  const failed = scenarioError(text)
+  if (failed) return failed
+  const view = body.view ?? claims.view ?? 'dev'
+  const delay = modeDelay(text, 3500, 5000)
+  const base = { sources: [], source_details: [], needs_review: true, view, latency_ms: delay } // 수치를 다루므로 항상 검토 필요(PRD 5.4)
+  const scoped = indexedPapers(claims, body.paper_ids ?? undefined)
+
+  if (/dora|없는/i.test(text) || !scoped.length) {
+    const notFound = [
+      claim({ sentence: 'DoRA는 MMLU에서 71.2를 기록한다', subject: 'DoRA', metric: 'MMLU avg', claimed_value: '71.2', dataset: 'MMLU' }),
+      claim({ sentence: 'DoRA는 LoRA보다 1.4p 높다', subject: 'DoRA', metric: 'MMLU avg', claimed_value: '+1.4p', dataset: 'MMLU' }),
+    ]
+    return [200, { ...base, claims: notFound, draft: '', warnings: ['라이브러리에서 비교할 값을 찾지 못했어요. 선행연구 모드로 해당 논문을 먼저 모아 주세요.'], handoff: true }, delay]
+  }
+
+  const lora = findPaper(claims, 41)?.status === 'indexed' ? 41 : scoped[0].id
+  const qlora = findPaper(claims, 42)?.status === 'indexed' ? 42 : scoped[0].id
+  const details = [
+    detail(lora, 'S1', 5, 'RoBERTa-base에서 LoRA의 학습 파라미터는 0.3M이다.'),
+    detail(lora, 'S2', 7, 'RoBERTa-base GLUE 평균: LoRA 87.2.'),
+    detail(qlora, 'S3', 2, '65B 모델을 48GB GPU 한 장에서 미세조정할 수 있다.'),
+  ]
+  const evil = /xss/i.test(text)
+  const result = [
+    claim({ sentence: 'LoRA는 학습 파라미터가 0.3M이다', subject: 'LoRA', metric: 'trainable params', claimed_value: '0.3M', dataset: 'RoBERTa-base', found_value: '0.3M', condition: 'RoBERTa-base 기준', verdict: 'match', labels: ['S1'] }),
+    claim({ sentence: 'LoRA(87.2)', subject: 'LoRA', metric: 'GLUE avg', claimed_value: '87.2', dataset: 'GLUE', found_value: '87.2', condition: 'RoBERTa-base 기준이에요. 원고에 모델 크기가 없어요.', verdict: 'condition_differs', labels: ['S2'] }),
+    claim({ sentence: 'QLoRA는 65B를 24GB GPU 한 장에서 학습한다', subject: 'QLoRA', metric: '필요 GPU 메모리', claimed_value: '24GB', dataset: null, found_value: '48GB', condition: null, verdict: 'mismatch', labels: ['S3'] }),
+    claim({ sentence: '우리 방법은 GLUE 평균 88.1이다', subject: '제안 방법', metric: 'GLUE avg', claimed_value: '88.1', dataset: 'GLUE', verdict: 'own_result', delta: { vs: 'LoRA', value: 0.9 } }),
+  ]
+  const draft = evil
+    ? '<script>alert("xss")</script> 제안 방법은 GLUE 평균 88.1을 기록해 LoRA의 87.2 [S2] 대비 0.9p 높다. <img src=x onerror="alert(1)">'
+    : '제안 방법은 GLUE 평균 88.1을 기록해 LoRA의 87.2 [S2] 대비 0.9p 높다. 다만 비교 대상의 모델 크기가 원고에 명시되지 않아 직접 비교에는 주의가 필요하다 [S2]. QLoRA는 65B 모델을 48GB GPU 한 장에서 학습할 수 있다 [S3].'
+  const warnings = evil ? ['<b onmouseover="alert(1)">경고</b>'] : ['비교 대상 모델 크기가 원고에 명시되지 않았어요.']
+  return [200, { ...base, claims: result, draft, warnings, sources: sourcesOf(details), source_details: details, handoff: false }, delay]
 }
 
 function summary({ body, claims }) {
@@ -515,6 +644,8 @@ const ROUTES = [
   ['POST', 'rag', /^\/zotero\/sync$/, syncZotero, 'admin'],
   ['POST', 'rag', /^\/rag-query$/, ragQuery, 'team'],
   ['POST', 'rag', /^\/summary$/, summary, 'team'],
+  ['POST', 'rag', /^\/topic-suggest$/, topicSuggest, 'team'],
+  ['POST', 'rag', /^\/verify$/, verifyManuscript, 'team'],
   ['GET', 'rag', /^\/health$/, () => [200, { status: 'ok' }], 'none'],
 
   ['POST', 'voice', /^\/stt$/, stt, 'team'],

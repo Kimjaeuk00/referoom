@@ -9,8 +9,8 @@ export const BASE_URL = {
 
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
-// 질의 40초, 업로드 요청 자체 60초(색인은 배치 폴링으로 따로 확인한다), 음성 질의는 인식·답변·합성을 합쳐 60초
-export const TIMEOUT = { normal: 15_000, query: 40_000, upload: 60_000, voice: 60_000 }
+// 질의 40초, 주제·검증처럼 LLM을 여러 번 부르는 요청(long) 60초, 업로드 요청 자체 60초(색인은 배치 폴링으로 따로 확인한다), 음성 질의는 인식·답변·합성을 합쳐 60초
+export const TIMEOUT = { normal: 15_000, query: 40_000, long: 60_000, upload: 60_000, voice: 60_000 }
 
 let getToken = () => null
 let on = { unauthorized() {}, noTeam() {}, forbidden() {} }
