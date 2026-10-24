@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { renderMarkdown } from '@/lib/markdown'
-import { LEVEL_ORDER, VIEWS } from '@/lib/levels'
+import { canReask, reaskLevel, VIEWS } from '@/lib/levels'
 import SourceList from './SourceList.vue'
 import ReviewBadge from './ReviewBadge.vue'
 import HandoffNotice from './HandoffNotice.vue'
@@ -9,12 +9,13 @@ import Icon from '@/components/common/Icon.vue'
 import { toast } from '@/composables/useToast'
 
 const props = defineProps({
-  result: { type: Object, required: true }, // { answer, sources, source_details, needs_review, handoff, level, view, latency_ms }
-  params: { type: Object, required: true }, // 이 답을 받을 때 보낸 level, view
+  result: { type: Object, required: true }, // { answer, sources, source_details, needs_review, handoff, view, latency_ms }
+  params: { type: Object, required: true }, // 이 답을 받을 때 보낸 view와, 더 쉽게/더 깊게일 때만 level
   busy: { type: Boolean, default: false },
+  active: { type: Object, default: null }, // { label, n } 눌린 근거. TurnResult가 갖고 있다가 근거 목록에 넘긴다
   reaskable: { type: Boolean, default: true }, // 음성 튜터에서는 다시 묻기 대신 다시 말한다
 })
-const emit = defineEmits(['reask', 'add-paper', 'ask-team'])
+const emit = defineEmits(['reask', 'add-paper', 'ask-team', 'cite'])
 
 const details = computed(() => props.result.source_details ?? [])
 const hasSources = computed(() => details.value.length > 0 || (props.result.sources?.length ?? 0) > 0)
@@ -34,16 +35,13 @@ async function copyAnswer() {
 
 const html = computed(() => renderMarkdown(props.result.answer, new Set(details.value.map((d) => d.label))))
 
-const active = ref(null)
-let clicks = 0
+// 본문의 알약(v-html 안의 button.cite)은 이벤트 위임으로 받아 라벨만 알린다
 function onBodyClick(event) {
   const chip = event.target.closest('button.cite')
-  if (chip) active.value = { label: chip.dataset.label, n: ++clicks }
+  if (chip) emit('cite', chip.dataset.label)
 }
 
-const levelIndex = computed(() => LEVEL_ORDER.indexOf(props.params.level))
-const easier = computed(() => LEVEL_ORDER[levelIndex.value - 1] ?? null)
-const deeper = computed(() => (levelIndex.value >= 0 ? LEVEL_ORDER[levelIndex.value + 1] ?? null : null))
+const depth = computed(() => props.params.level ?? null) // 지금 답변의 깊이: L1(쉬움) | null(기본) | L3(깊음)
 const otherView = computed(() => (props.params.view === 'rnd' ? 'dev' : 'rnd'))
 </script>
 
@@ -55,8 +53,8 @@ const otherView = computed(() => (props.params.view === 'rnd' ? 'dev' : 'rnd'))
     <SourceList :items="details" :fallback="result.sources ?? []" :active="active" />
     <div class="reask" role="group" aria-label="이 답변으로 할 수 있는 일">
       <template v-if="reaskable">
-        <button type="button" class="btn" :disabled="busy || !easier" @click="emit('reask', { level: easier })">더 쉽게</button>
-        <button type="button" class="btn" :disabled="busy || !deeper" @click="emit('reask', { level: deeper })">더 깊게</button>
+        <button type="button" class="btn" :disabled="busy || !canReask(depth, 'easier')" @click="emit('reask', { level: reaskLevel(depth, 'easier') })">더 쉽게</button>
+        <button type="button" class="btn" :disabled="busy || !canReask(depth, 'deeper')" @click="emit('reask', { level: reaskLevel(depth, 'deeper') })">더 깊게</button>
         <button type="button" class="btn" :disabled="busy" @click="emit('reask', { view: otherView })">{{ VIEWS[otherView].name }} 관점으로</button>
       </template>
       <slot />

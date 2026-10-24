@@ -6,17 +6,15 @@ import { useProfileStore } from '@/stores/profile'
 import { useLibraryStore } from '@/stores/library'
 import { toast } from '@/composables/useToast'
 import { clampSide, isNarrow, SIDE_DEFAULT, SIDE_MAX, SIDE_MIN, sideOpen, sideWidth } from '@/composables/useSidePanel'
-import { LEVEL_ORDER, LEVELS, levelLabel, VIEWS } from '@/lib/levels'
+import { depthNote, VIEWS } from '@/lib/levels'
 import { toneOfLabel } from '@/lib/format'
 import PaperPicker from '@/components/qa/PaperPicker.vue'
-import AnswerView from '@/components/qa/AnswerView.vue'
-import StatusBanner from '@/components/common/StatusBanner.vue'
+import TurnResult from '@/components/qa/TurnResult.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Icon from '@/components/common/Icon.vue'
 import UploadDropzone from '@/components/library/UploadDropzone.vue'
 import TopicSearchModal from '@/components/library/TopicSearchModal.vue'
 import MicButton from '@/components/voice/MicButton.vue'
-import SpeakButton from '@/components/voice/SpeakButton.vue'
 import { voiceAvailable } from '@/lib/voice'
 
 const MAX = 1000
@@ -43,8 +41,7 @@ const question = ref('')
 const topicOpen = ref(false)
 const thread = ref(null)
 
-// 수준·관점의 처음 값은 내 프로필. 여기서 바꾼 값은 질문에만 쓰이고 프로필은 설정 화면에서 바꾼다.
-const level = computed({ get: () => qa.level ?? profile.level, set: (v) => (qa.level = v) })
+// 관점의 처음 값은 내 프로필. 여기서 바꾼 값은 질문에만 쓰이고 프로필은 설정 화면에서 바꾼다.
 const view = computed({ get: () => qa.view ?? profile.view, set: (v) => (qa.view = v) })
 
 // 왼쪽 목록에서 고른 논문 = 질문 범위. 하나도 없으면 팀 전체.
@@ -75,8 +72,14 @@ function scopeText(params) {
   return text
 }
 
+// 관점과, 더 쉽게/더 깊게로 다시 물었으면 그 표시 (예: '구현 관점, 쉬운 설명')
+function viewNote(params) {
+  const depth = depthNote(params.level)
+  return `${VIEWS[params.view]?.name ?? ''} 관점${depth ? `, ${depth}` : ''}`
+}
+
 function describe(params) {
-  return `${levelLabel(params.level)}, ${VIEWS[params.view]?.name ?? ''} 관점, ${scopeText(params)}`
+  return `${viewNote(params)}, ${scopeText(params)}`
 }
 
 function scrollToTurn(turn, block = 'start') {
@@ -86,7 +89,7 @@ function scrollToTurn(turn, block = 'start') {
 
 async function send() {
   if (!canSend.value) return
-  const turn = qa.ask(trimmed.value, { source: qa.source, scope: qa.scope, level: level.value, view: view.value })
+  const turn = qa.ask(trimmed.value, { source: qa.source, scope: qa.scope, view: view.value })
   if (!turn) return
   question.value = ''
   if (isNarrow()) sideOpen.value = false // 좁은 화면에서는 서랍을 닫고 답을 보여 준다
@@ -181,7 +184,7 @@ function turnState(turn) {
         <button v-for="turn in history" :key="turn.id" type="button" class="card" @click="scrollToTurn(turn)">
           <span class="card-q">{{ turn.question }}</span>
           <span class="card-meta">
-            {{ levelLabel(turn.params.level) }}, {{ VIEWS[turn.params.view]?.name }} 관점
+            {{ viewNote(turn.params) }}
             <time class="card-time tabular" :datetime="turn.askedAt.toISOString()">{{ timeFmt.format(turn.askedAt) }}</time>
           </span>
           <span v-if="turnState(turn)" class="card-state">{{ turnState(turn) }}</span>
@@ -215,14 +218,6 @@ function turnState(turn) {
     <section class="main-col">
       <div class="control-bar" role="group" aria-label="질문 조건">
         <span v-if="!sideOpen && pickedIds.length" class="picked-note">논문 {{ pickedIds.length }}편에서 찾는 중</span>
-        <div class="control">
-          <span class="section-label">설명 수준</span>
-          <div class="segmented">
-            <button v-for="key in LEVEL_ORDER" :key="key" type="button" :aria-pressed="level === key" :title="LEVELS[key].desc" @click="level = key">
-              {{ LEVELS[key].name }}
-            </button>
-          </div>
-        </div>
         <div class="control">
           <span class="section-label">관점</span>
           <div class="segmented">
@@ -274,22 +269,14 @@ function turnState(turn) {
             <span class="avatar brand" aria-hidden="true"><Icon name="bookmark" :size="18" /></span>
             <div class="msg-body">
               <p class="who">Referoom <span class="meta">{{ describe(turn.params) }}</span></p>
-              <div v-if="turn.status === 'loading'" class="pending">
-                <div class="skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
-                <p class="hint">{{ turn.slow ? '조금 더 걸리고 있어요.' : '근거를 찾고 답변을 쓰는 중이에요.' }}</p>
-              </div>
-              <StatusBanner v-else-if="turn.status === 'error'" :message="turn.error.message" :retry="turn.error.retryable" @retry="qa.retry(turn)" />
-              <AnswerView
-                v-else
-                :result="turn.result"
-                :params="turn.params"
+              <TurnResult
+                :turn="turn"
                 :busy="qa.busy"
+                @retry="qa.retry(turn)"
                 @reask="(change) => reask(turn, change)"
                 @add-paper="addPaper(turn)"
                 @ask-team="askTeam(turn)"
-              >
-                <SpeakButton v-if="voiceAvailable" :text="turn.result.answer" />
-              </AnswerView>
+              />
             </div>
           </div>
         </article>
@@ -661,12 +648,6 @@ function turnState(turn) {
 
 .reply .msg-body > :nth-child(2) {
   margin-top: 12px;
-}
-
-.pending {
-  max-width: 62ch;
-  display: grid;
-  gap: 12px;
 }
 
 .composer {

@@ -3,8 +3,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { api, TIMEOUT } from '@/api/client'
 import { errorText } from '@/api/errors'
 import { usePolling } from '@/composables/usePolling'
-import { useAuthStore } from '@/stores/auth'
 import { isBatchDone } from '@/lib/format'
+import { collectedPaperIds, MAX_COLLECT } from '@/lib/modes'
 import BatchProgress from './BatchProgress.vue'
 
 // 주제 수집(후보 선택 방식): 키워드 → POST /search-topic → 고른 논문만 POST /upload-topic → 배치 폴링 (DEV_02 4.3, DEV_03 5.1)
@@ -12,9 +12,9 @@ const props = defineProps({
   open: { type: Boolean, default: false },
   initialQuery: { type: String, default: '' },
 })
-const emit = defineEmits(['close', 'done'])
-const MAX_PICK = 5
-const auth = useAuthStore()
+// done: 배치가 끝났다(새로고침용), collected: 이번에 라이브러리에 들어 있게 된 논문 id 목록(선행연구 모드가 범위로 쓴다)
+const emit = defineEmits(['close', 'done', 'collected'])
+const MAX_PICK = MAX_COLLECT // 서버 상한과 같다
 
 const dialog = ref(null)
 const query = ref('')
@@ -32,7 +32,9 @@ const { data: batch, running: polling, error: pollError, start } = usePolling(
 )
 
 watch(polling, (now, before) => {
-  if (before && !now) emit('done', batch.value)
+  if (!before || now) return
+  emit('done', batch.value)
+  emit('collected', collectedPaperIds(batch.value))
 })
 
 function syncOpen(open) {
@@ -57,7 +59,6 @@ function reset(initial = '') {
   error.value = ''
   batchId.value = null
   batch.value = null
-  confirmRollback.value = false
 }
 
 async function search() {
@@ -87,26 +88,6 @@ function toggle(c) {
   if (c.already_in_library) return
   if (isPicked(c)) selected.value = selected.value.filter((id) => id !== c.candidate_id)
   else if (!full.value) selected.value = [...selected.value, c.candidate_id]
-}
-
-// 관리자는 방금 수집한 배치를 통째로 되돌릴 수 있다(DEV_03 5.1, P1). 지운 논문은 되살릴 수 없어서 한 번 더 묻는다.
-const confirmRollback = ref(false)
-const rollingBack = ref(false)
-const canRollback = computed(() => auth.isAdmin && batch.value && ['done', 'failed'].includes(batch.value.status))
-
-async function rollback() {
-  rollingBack.value = true
-  error.value = ''
-  try {
-    await api.rag(`/ingest/batches/${batchId.value}/rollback`, { method: 'POST' })
-    batch.value = await api.rag(`/ingest/batches/${batchId.value}`)
-    emit('done', batch.value)
-  } catch (e) {
-    error.value = errorText(e)
-  } finally {
-    rollingBack.value = false
-    confirmRollback.value = false
-  }
 }
 
 async function collect() {
@@ -146,16 +127,7 @@ async function collect() {
 
       <p v-if="error" class="field-error" role="alert">{{ error }}</p>
 
-      <BatchProgress v-if="batch" :batch="batch">
-        <div v-if="canRollback" class="rollback">
-          <template v-if="confirmRollback">
-            <span>이번에 추가한 논문 {{ batch.indexed + batch.failed }}편과 청크를 지울까요? 되돌릴 수 없어요.</span>
-            <button type="button" class="btn btn-danger" :disabled="rollingBack" @click="rollback">{{ rollingBack ? '되돌리는 중' : '수집 되돌리기' }}</button>
-            <button type="button" class="btn" :disabled="rollingBack" @click="confirmRollback = false">취소</button>
-          </template>
-          <button v-else type="button" class="btn-quiet" @click="confirmRollback = true">이번 수집 되돌리기</button>
-        </div>
-      </BatchProgress>
+      <BatchProgress v-if="batch" :batch="batch" />
       <p v-if="pollError" class="field-error" role="alert">{{ errorText(pollError) }}</p>
 
       <template v-if="candidates !== null && !batch">
@@ -307,14 +279,6 @@ meter {
 
 .owned-note {
   color: var(--c-ink-muted);
-}
-
-.rollback {
-  margin-top: 10px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
 }
 
 .foot {

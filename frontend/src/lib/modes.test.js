@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  CHIP_MODES, csvCell, EMPTY_CELL, MAX_COLLECT, MODE_ORDER, MODES, PERSPECTIVES, perspectiveOf, PRIOR_COLUMNS,
+  CHIP_MODES, collectedPaperIds, csvCell, EMPTY_CELL, MAX_COLLECT, MODE_ORDER, MODES, PERSPECTIVES, perspectiveOf, PRIOR_COLUMNS,
   priorTableToCsv, priorTableToMarkdown, buildRequest, validateInput, VERDICTS, verdictOf,
 } from './modes.js'
 
@@ -124,4 +124,21 @@ test('priorTableToCsv: 수식 주입 방지, CRLF, BOM 옵션', () => {
   assert.ok(lines[1].includes('GLUE | E2E'))
   assert.ok(!csv.startsWith('﻿'))
   assert.ok(priorTableToCsv(ROWS, { bom: true }).startsWith('﻿논문'))
+})
+
+test('collectedPaperIds: 색인했거나 이미 있어 건너뛴 논문만, id 없는 항목·실패는 뺀다', () => {
+  const batch = {
+    papers: [
+      { paper_id: 41, status: 'indexed' },
+      { paper_id: 42, status: 'skipped' },
+      { paper_id: 43, status: 'failed' },
+      { paper_id: null, status: 'pending' },
+      { paper_id: null, status: 'indexed' },
+      { paper_id: 0, status: 'indexed' }, // 0도 id 값이므로 남긴다
+    ],
+  }
+  assert.deepEqual(collectedPaperIds(batch), [41, 42, 0])
+  assert.deepEqual(collectedPaperIds({ papers: [] }), [])
+  assert.deepEqual(collectedPaperIds({}), [])
+  assert.deepEqual(collectedPaperIds(null), [])
 })

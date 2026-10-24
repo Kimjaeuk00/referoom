@@ -5,10 +5,10 @@ import { useQaStore } from '@/stores/qa'
 import { useProfileStore } from '@/stores/profile'
 import { useLibraryStore } from '@/stores/library'
 import { sideOpen } from '@/composables/useSidePanel'
-import { LEVELS, VIEWS } from '@/lib/levels'
+import { VIEWS } from '@/lib/levels'
 import { voiceAvailable } from '@/lib/voice'
 import Icon from '@/components/common/Icon.vue'
-import LevelViewSelector from '@/components/common/LevelViewSelector.vue'
+import ViewSelector from '@/components/common/ViewSelector.vue'
 import TopicSearchModal from '@/components/library/TopicSearchModal.vue'
 import MicButton from '@/components/voice/MicButton.vue'
 import { formatDate } from '@/lib/format'
@@ -28,7 +28,6 @@ const plusMenu = ref(null)
 const condMenu = ref(null)
 const topicOpen = ref(false)
 
-const level = computed({ get: () => qa.level ?? profile.level, set: (v) => (qa.level = v) })
 const view = computed({ get: () => qa.view ?? profile.view, set: (v) => (qa.view = v) })
 const trimmed = computed(() => question.value.trim())
 const canSend = computed(() => trimmed.value.length >= 2 && trimmed.value.length <= MAX && !qa.busy)
@@ -61,7 +60,7 @@ function closeMenus(event) {
 
 function send() {
   if (!canSend.value) return
-  const turn = qa.ask(trimmed.value, { source: qa.source, scope: qa.scope, level: level.value, view: view.value })
+  const turn = qa.ask(trimmed.value, { source: qa.source, scope: qa.scope, view: view.value })
   if (turn) router.push({ name: 'ask' })
 }
 
@@ -106,15 +105,14 @@ function openPapers() {
           @keydown="onKeydown"
         ></textarea>
 
-        <!-- 시안의 "Pro 높음" 자리: 설명 수준과 관점 -->
+        <!-- 시안의 "Pro 높음" 자리: 답변 관점 (모드 칩은 T5에서 이 아래에 들어간다) -->
         <details ref="condMenu" class="menu-wrap">
           <summary class="cond">
-            <span class="cond-level">{{ LEVELS[level]?.name }}</span>
-            <span class="cond-view">{{ VIEWS[view]?.name }}</span>
+            <span class="cond-view">{{ VIEWS[view]?.name }} 관점</span>
             <Icon name="chevron" :size="18" />
           </summary>
           <div class="pop cond-pop">
-            <LevelViewSelector v-model:level="level" v-model:view="view" />
+            <ViewSelector v-model:view="view" />
           </div>
         </details>
 
@@ -263,12 +261,8 @@ function openPapers() {
   background: var(--c-surface);
 }
 
-.cond-level {
-  font-weight: 500;
-}
-
 .cond-view {
-  color: var(--c-ink-muted);
+  font-weight: 500;
 }
 
 /* 작은 메뉴: 알약 아래로 펼친다 */
@@ -314,7 +308,7 @@ function openPapers() {
   padding: 16px;
 }
 
-/* 수준·관점 고르기 안의 버튼은 메뉴 항목 모양을 따르지 않는다 */
+/* 관점 고르기 안의 버튼은 메뉴 항목 모양을 따르지 않는다 */
 .cond-pop :deep(.segmented button) {
   display: inline-flex;
   padding: 0 12px;

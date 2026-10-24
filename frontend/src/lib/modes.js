@@ -5,6 +5,10 @@
 export const MAX_COLLECT = 10 // 한 번에 수집하거나 대상으로 고를 수 있는 논문 수 (서버 상한과 같다)
 export const EMPTY_CELL = '논문에 명시되지 않음'
 
+/** 수집 배치가 끝난 뒤 라이브러리에 들어 있는 논문의 id (새로 색인했거나 이미 있어 건너뛴 것). 실패한 논문과 아직 id가 없는 항목은 뺀다. */
+export const collectedPaperIds = (batch) =>
+  (batch?.papers ?? []).filter((p) => (p.status === 'indexed' || p.status === 'skipped') && p.paper_id != null).map((p) => p.paper_id)
+
 export const MODES = {
   tutor: { label: '튜터', placeholder: '논문에 대해 궁금한 점을 물어보세요', max: 1000, path: '/rag-query', timeoutKey: 'query' },
   prior: { label: '선행연구', placeholder: '조사할 연구 주제를 입력하세요', max: 1000, path: '/rag-query', timeoutKey: 'query', hint: '주제를 찾아 논문을 모으고, 모은 논문을 비교해 정리해요.' },

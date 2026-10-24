@@ -3,7 +3,7 @@
 // 데모 흐름은 DEV_05 5.1과 같다: LoRA·QLoRA는 이미 라이브러리에 있고, DoRA는 Zotero 동기화로, VeRA는 주제 수집으로 들어온다.
 // 상태는 메모리에만 있어서 새로고침하면 처음으로 돌아간다.
 //
-// 계정(비밀번호는 아무 값): minsu(개발팀 팀원 L1) · admin(개발팀 관리자 L3) · rnd(R&D팀 관리자, 빈 라이브러리) · noteam(팀 없음) · fail(실패)
+// 계정(비밀번호는 아무 값): minsu(개발팀 팀원) · admin(개발팀 관리자) · rnd(R&D팀 관리자, 빈 라이브러리) · noteam(팀 없음) · fail(실패)
 // 초대 코드: K3F9Q2XA(플랫폼개발팀), R7M2PQ4C(선행연구팀)
 // 질문으로 시나리오 고르기(/rag-query):
 //   기본 → LoRA 답변(출처 2개) / "어텐션"·"수식" → needs_review / "DoRA"·"VeRA"(라이브러리에 없을 때)·"없는" → handoff
@@ -12,6 +12,7 @@
 //   선행연구(/rag-query mode=prior): 정리표(table) 포함 / 주제(/topic-suggest): 후보 4개, 대상 논문 1~10편 / 검증(/verify): 판정 5종
 //   "없는" → handoff / "503"·"타임아웃"·"401"·"느린"·"xss"는 위와 같다 / 검증에 "DoRA"를 쓰면 모든 주장이 근거 없음(handoff)
 //   주제는 QLoRA만 고르면 한계 서술이 없어 handoff(PRD: 한계 근거 0건)
+// 수집은 후보를 직접 고른 1~10편만(자동 선택 없음). 수집 되돌리기와 Zotero 설정 저장·해제는 서버에 없다.
 // PDF 이름: dup → 409, scan → 배치에서 "텍스트 추출 불가(스캔 PDF)"로 실패. 주제 검색어 zzz → 후보 0건.
 import { decodeJwt, isExpired } from '@/lib/jwt'
 
@@ -61,10 +62,10 @@ function addUser({ username, displayName, role = 'member', level = 'L2', view = 
   return user
 }
 
-addUser({ username: 'minsu', displayName: '민수', level: 'L1', teamId: 3 })
-addUser({ username: 'admin', displayName: '지원', role: 'team_admin', level: 'L3', teamId: 3 })
-addUser({ username: 'rnd', displayName: '서준', role: 'team_admin', level: 'L3', teamId: 4 })
-addUser({ username: 'noteam', displayName: '서연', level: 'L2' })
+addUser({ username: 'minsu', displayName: '민수', teamId: 3 })
+addUser({ username: 'admin', displayName: '지원', role: 'team_admin', teamId: 3 })
+addUser({ username: 'rnd', displayName: '서준', role: 'team_admin', teamId: 4 })
+addUser({ username: 'noteam', displayName: '서연' })
 
 const teamView = (team) => (team ? { id: team.id, name: team.name, type: team.type } : null)
 
@@ -102,24 +103,24 @@ function login({ body }) {
 }
 
 function signup({ body }) {
-  const { username, password, displayName, level, teamMode, teamName, teamType, teamCode } = body ?? {}
+  const { username, password, displayName, teamMode, teamName, teamType, teamCode } = body ?? {}
   if (!username || username.length < 4 || username.length > 50 || !password || password.length < 8)
     return javaError(422, 'VALIDATION_ERROR', 'invalid input')
   if (users.has(username)) return javaError(409, 'CONFLICT', 'username exists')
   if (teamMode === 'join') {
     const team = teamByCode(teamCode)
     if (!team) return javaError(404, 'TEAM_NOT_FOUND', 'team not found')
-    addUser({ username, displayName, level, teamId: team.id })
+    addUser({ username, displayName, teamId: team.id })
     return [201, { ok: true, teamId: team.id, role: 'member' }]
   }
   if (teamMode === 'create') {
     const id = Math.max(...TEAMS.keys()) + 1
     const inviteCode = Math.random().toString(36).slice(2, 10).toUpperCase().padEnd(8, 'X')
     TEAMS.set(id, { id, name: teamName, type: teamType, inviteCode })
-    addUser({ username, displayName, level, role: 'team_admin', teamId: id })
+    addUser({ username, displayName, role: 'team_admin', teamId: id })
     return [201, { ok: true, teamId: id, role: 'team_admin', inviteCode }]
   }
-  addUser({ username, displayName, level })
+  addUser({ username, displayName })
   return [201, { ok: true, teamId: null, role: 'member' }]
 }
 
@@ -131,6 +132,7 @@ function me({ claims }) {
 function updateProfile({ body, claims }) {
   const user = userOf(claims)
   if (!user) return javaError(401, 'UNAUTHORIZED', 'unknown user')
+  if (body?.level == null && body?.view == null) return javaError(400, 'VALIDATION_ERROR', 'level 또는 view가 필요합니다')
   if (body?.level && !['L1', 'L2', 'L3'].includes(body.level)) return javaError(422, 'VALIDATION_ERROR', 'level')
   if (body?.view && !['dev', 'rnd'].includes(body.view)) return javaError(422, 'VALIDATION_ERROR', 'view')
   Object.assign(user, { level: body?.level ?? user.level, view: body?.view ?? user.view })
@@ -245,6 +247,8 @@ function batchView(batch) {
     indexed: rows.filter((r) => r.row.status === 'indexed').length,
     skipped: 0,
     failed: rows.filter((r) => r.row.status === 'failed').length,
+    removed: 0,
+    error_msg: null,
     papers: rows.map(({ row }) => ({ paper_id: row.id, title: row.title, status: row.status, chunk_count: row.chunk_count ?? undefined, error_msg: row.error_msg })),
   }
 }
@@ -268,15 +272,6 @@ function getBatch({ params, claims }) {
   return [200, batchView(batch)]
 }
 
-function rollbackBatch({ params, claims }) {
-  if (claims.role !== 'team_admin') return aiError(403, 'FORBIDDEN', 'admin only')
-  const batch = batches.get(Number(params.id))
-  if (!batch || batch.team_id !== claims.team_id) return aiError(404, 'NOT_FOUND', '배치를 찾을 수 없습니다.')
-  batch.rows.forEach(({ row }) => papers.includes(row) && papers.splice(papers.indexOf(row), 1))
-  batch.status = 'rolled_back'
-  return [200, { ok: true, ...batchView(batch) }]
-}
-
 function uploadPaper({ formData, claims }) {
   const file = formData?.get('file')
   const name = String(file?.name ?? '')
@@ -289,7 +284,7 @@ function uploadPaper({ formData, claims }) {
   const batch = createBatch(claims, 'upload_pdf', null, [
     { paper: { title, authors: '', year: null, source_type: 'pdf', tags }, failWith: /scan/i.test(name) ? '텍스트 추출 불가(스캔 PDF)' : null },
   ])
-  return [202, { batch_id: batch.id, paper_id: batch.rows[0].row.id, status: 'pending' }]
+  return [202, { batch_id: batch.id, paper_id: null, status: 'pending' }] // 서버는 Zotero 항목을 만든 뒤에야 paper_id가 정해진다
 }
 
 const CANDIDATES = [
@@ -297,9 +292,15 @@ const CANDIDATES = [
   { candidate_id: '2402.12354', title: 'LoRA+: Efficient Low Rank Adaptation of Large Models', authors: ['Soufiane Hayou', 'Nikhil Ghosh', 'Bin Yu'], year: 2024, abstract: 'LoRA의 두 행렬 A와 B에 서로 다른 학습률을 주면 학습이 더 빨라진다는 분석.', relevance: 0.78 },
   { candidate_id: '2106.09685', title: 'LoRA: Low-Rank Adaptation of Large Language Models', authors: ['Edward J. Hu', 'Yelong Shen'], year: 2021, abstract: '사전학습 가중치는 고정하고 저랭크 분해 행렬만 학습하는 미세조정 방법.', relevance: 0.74 },
   { candidate_id: '2303.10512', title: 'AdaLoRA: Adaptive Budget Allocation for Parameter-Efficient Fine-Tuning', authors: ['Qingru Zhang', 'Minshuo Chen'], year: 2023, abstract: '층마다 중요도에 따라 LoRA 랭크를 다르게 배분하는 방법.', relevance: 0.69 },
+  { candidate_id: '2309.14717', title: 'QA-LoRA: Quantization-Aware Low-Rank Adaptation of Large Language Models', authors: ['Yuhui Xu', 'Lingxi Xie'], year: 2023, abstract: '양자화된 모델의 정밀도를 유지한 채 LoRA 어댑터를 합칠 수 있게 하는 방법.', relevance: 0.66 },
+  { candidate_id: '2309.12307', title: 'LongLoRA: Efficient Fine-tuning of Long-Context Large Language Models', authors: ['Yukang Chen', 'Shengju Qian'], year: 2023, abstract: '긴 문맥으로 확장할 때 어텐션 비용을 줄이는 미세조정 방법.', relevance: 0.63 },
+  { candidate_id: '2404.02948', title: 'PiSSA: Principal Singular Values and Singular Vectors Adaptation', authors: ['Fanxu Meng', 'Zhaohui Wang'], year: 2024, abstract: '가중치의 주요 특이값 성분으로 어댑터를 초기화해 수렴을 빠르게 하는 방법.', relevance: 0.61 },
+  { candidate_id: '2403.03507', title: 'GaLore: Memory-Efficient LLM Training by Gradient Low-Rank Projection', authors: ['Jiawei Zhao', 'Zhenyu Zhang'], year: 2024, abstract: '그래디언트를 저랭크로 투영해 전체 파라미터 학습의 메모리를 줄이는 방법.', relevance: 0.58 },
+  { candidate_id: '2405.09673', title: 'LoRA Learns Less and Forgets Less', authors: ['Dan Biderman', 'Jacob Portes'], year: 2024, abstract: 'LoRA와 전체 미세조정이 새로 배우는 양과 잊는 양을 비교한 실험 분석.', relevance: 0.55 },
+  { candidate_id: '2311.03285', title: 'S-LoRA: Serving Thousands of Concurrent LoRA Adapters', authors: ['Ying Sheng', 'Shiyi Cao'], year: 2023, abstract: '수많은 LoRA 어댑터를 한 서버에서 동시에 서빙하는 시스템.', relevance: 0.52 },
   { candidate_id: '2001.08361', title: 'Scaling Laws for Neural Language Models', authors: ['Jared Kaplan', 'Sam McCandlish'], year: 2020, abstract: '모델 크기, 데이터, 연산량에 따른 언어 모델 손실의 거듭제곱 법칙.', relevance: 0.31 },
 ]
-const MIN_RELEVANCE = 0.45 // TOPIC_MIN_RELEVANCE
+const MIN_RELEVANCE = 0.5 // 서버의 TOPIC_MIN_RELEVANCE 기본값(실제 arXiv 후보 40건으로 보정)
 
 const candidatesFor = (claims) =>
   CANDIDATES.map((c) => ({
@@ -314,17 +315,16 @@ function searchTopic({ body, claims }) {
   const topic = String(body?.topic ?? '').trim()
   if (topic.length < 2) return aiError(422, 'VALIDATION_ERROR', '주제를 입력하세요.')
   if (/^z+$/i.test(topic)) return [200, { topic, candidates: [] }]
-  return [200, { topic, candidates: candidatesFor(claims).slice(0, body.max_results ?? 10) }]
+  return [200, { topic, candidates: candidatesFor(claims).sort((a, b) => b.relevance - a.relevance).slice(0, body.max_results ?? 10) }]
 }
 
 function uploadTopic({ body, claims }) {
   const topic = String(body?.topic ?? '').trim()
   const pool = candidatesFor(claims).filter((c) => !c.already_in_library)
-  // selected가 없으면 자동 선택: 관련도 상위, low_relevance 제외, 최대 5건(DEV_03 5.1)
-  const picked = Array.isArray(body?.selected)
-    ? pool.filter((c) => body.selected.includes(c.candidate_id))
-    : pool.filter((c) => !c.low_relevance).slice(0, 5)
-  if (picked.length === 0 || picked.length > 5) return aiError(422, 'VALIDATION_ERROR', '1~5편을 고르세요.')
+  // 사용자가 고른 논문만 수집한다(자동 선택 없음). 한 번에 1~10편, 이미 있는 논문은 뺀다.
+  if (!Array.isArray(body?.selected) || body.selected.length < 1 || body.selected.length > 10) return aiError(422, 'VALIDATION_ERROR', '1~10편을 고르세요.')
+  const picked = pool.filter((c) => body.selected.includes(c.candidate_id))
+  if (picked.length === 0) return aiError(422, 'VALIDATION_ERROR', '선택한 논문이 이미 모두 라이브러리에 있습니다.')
   const batch = createBatch(
     claims,
     'topic',
@@ -337,19 +337,6 @@ function uploadTopic({ body, claims }) {
 function getZoteroConfig({ claims }) {
   const cfg = zotero.get(claims.team_id)
   return [200, { configured: Boolean(cfg), group_id: cfg?.group_id ?? null, last_synced_at: cfg?.last_synced_at ?? null }]
-}
-
-function saveZoteroConfig({ body, claims }) {
-  const groupId = Number(body?.group_id)
-  if (!Number.isInteger(groupId) || groupId <= 0 || String(body?.api_key ?? '').length < 10)
-    return aiError(400, 'ZOTERO_AUTH_FAILED', 'Zotero 연결 실패')
-  zotero.set(claims.team_id, { group_id: groupId, last_synced_at: zotero.get(claims.team_id)?.last_synced_at ?? null })
-  return [200, { ok: true }]
-}
-
-function deleteZoteroConfig({ claims }) {
-  zotero.delete(claims.team_id)
-  return [200, { ok: true }]
 }
 
 function syncZotero({ claims }) {
@@ -389,10 +376,10 @@ function ragQuery({ body, claims }) {
   if (question.includes('타임아웃')) return aiError(503, 'UPSTREAM_TIMEOUT', 'LLM timeout')
   if (question.includes('401')) return aiError(401, 'TOKEN_EXPIRED', '토큰 만료')
 
-  const level = body.level ?? claims.level ?? 'L2'
+  const level = body.level ?? 'L2' // 요청의 level(더 쉽게/더 깊게)만 쓰고 JWT claim은 무시한다(v0.2)
   const view = body.view ?? claims.view ?? 'dev'
   const delay = question.includes('느린') ? 12_000 : between(1500, 3000)
-  const meta = { level, view, latency_ms: delay }
+  const meta = { view, latency_ms: delay }
   const handoff = [200, { ...meta, answer: '팀 라이브러리에서 관련 내용을 찾을 수 없습니다.', sources: [], source_details: [], needs_review: false, handoff: true }, delay]
 
   if (teamPapers(claims).every((p) => p.status !== 'indexed') || /없는/.test(question)) return handoff
@@ -568,7 +555,7 @@ function summary({ body, claims }) {
       ? { key: 'check', title: '선행연구 비교·재현성', text: '기존 방법과의 차이, 재현에 필요한 설정을 정리한 목업 문단입니다.', sources: src(6) }
       : { key: 'check', title: '구현 시 체크포인트', text: '1. 어디에 붙일지 정한다\n2. 하이퍼파라미터 기본값으로 시작한다\n3. 평가셋으로 비교한다', sources: src(6) },
   ]
-  return [200, { paper_id: paper.id, title: paper.title, level: body.level ?? 'L2', view, sections, needs_review: true, latency_ms: 9100 }, between(2000, 3000)]
+  return [200, { paper_id: paper.id, title: paper.title, view, sections, needs_review: true, latency_ms: 9100 }, between(2000, 3000)]
 }
 
 // ---------- 음성 (DEV_04 6.2) ----------
@@ -606,7 +593,7 @@ function tts({ body, claims }) {
 function voiceQa({ formData, claims }) {
   const audio = formData?.get('audio')
   if (!audio || audio.size === 0) return aiError(422, 'STT_EMPTY', '음성을 인식하지 못했어요. 다시 말씀해 주세요.')
-  const [status, rag] = ragQuery({ body: { question: 'LoRA는 어떤 파라미터를 학습해?', level: formData.get('level'), view: formData.get('view') }, claims })
+  const [status, rag] = ragQuery({ body: { question: 'LoRA는 어떤 파라미터를 학습해?', view: formData.get('view') }, claims })
   if (status !== 200) return [status, rag]
   const speech = rag.handoff ? '논문 라이브러리에서 관련 내용을 찾지 못했어요. 논문 추가를 요청해 보세요.' : '사전학습 가중치는 고정하고 저랭크 행렬만 학습합니다. 자세한 내용은 화면을 확인하세요.'
   return [200, { stt_text: 'LoRA는 어떤 파라미터를 학습해?', ...rag, speech_text: speech, ...newAudio(claims), latency_ms: { stt: 1200, rag: rag.latency_ms, tts: 900, total: 2100 + rag.latency_ms } }, 3000]
@@ -637,10 +624,7 @@ const ROUTES = [
   ['POST', 'rag', /^\/search-topic$/, searchTopic, 'team'],
   ['POST', 'rag', /^\/upload-topic$/, uploadTopic, 'team'],
   ['GET', 'rag', /^\/ingest\/batches\/(?<id>[^/]+)$/, getBatch, 'team'],
-  ['POST', 'rag', /^\/ingest\/batches\/(?<id>[^/]+)\/rollback$/, rollbackBatch, 'admin'],
   ['GET', 'rag', /^\/zotero\/config$/, getZoteroConfig, 'admin'],
-  ['POST', 'rag', /^\/zotero\/config$/, saveZoteroConfig, 'admin'],
-  ['DELETE', 'rag', /^\/zotero\/config$/, deleteZoteroConfig, 'admin'],
   ['POST', 'rag', /^\/zotero\/sync$/, syncZotero, 'admin'],
   ['POST', 'rag', /^\/rag-query$/, ragQuery, 'team'],
   ['POST', 'rag', /^\/summary$/, summary, 'team'],

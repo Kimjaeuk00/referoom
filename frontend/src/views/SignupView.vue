@@ -6,7 +6,6 @@ import { useAuthStore } from '@/stores/auth'
 import { errorText } from '@/api/errors'
 import { TEAM_TYPES } from '@/lib/levels'
 import { toast } from '@/composables/useToast'
-import LevelViewSelector from '@/components/common/LevelViewSelector.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -16,7 +15,6 @@ const form = reactive({
   password: '',
   passwordConfirm: '',
   displayName: '',
-  level: 'L2',
   teamMode: 'create', // create | join (DEV_01 4.1)
   teamName: '',
   teamType: 'dev',
@@ -45,7 +43,6 @@ function payload() {
     username: form.username.trim(),
     password: form.password,
     displayName: form.displayName.trim(),
-    level: form.level,
     teamMode: form.teamMode,
   }
   return form.teamMode === 'create'
@@ -136,8 +133,6 @@ async function copyCode() {
             <input id="su-name" v-model="form.displayName" class="input" maxlength="100" :aria-invalid="Boolean(show('displayName'))" />
             <p v-if="show('displayName')" class="field-error">{{ errors.displayName }}</p>
           </div>
-
-          <LevelViewSelector v-model:level="form.level" :show-view="false" />
 
           <fieldset class="team">
             <legend class="label">팀</legend>

@@ -17,7 +17,7 @@ const error = ref('')
 
 // 시안의 "What Bothers You?" 카드: 논문을 읽다 막히는 지점과 Referoom이 돕는 방식
 const PAINS = [
-  { icon: 'term', title: '용어가 낯설어요', text: '입문 수준을 고르면 비유와 쉬운 말로 풀어 설명해요.' },
+  { icon: 'term', title: '용어가 낯설어요', text: '답변 아래 "더 쉽게"를 누르면 비유와 쉬운 말로 다시 풀어 설명해요.' },
   { icon: 'formula', title: '수식이 어려워요', text: '수식은 그대로 보여 주고, 원문에서 확인할 쪽을 알려 줘요.' },
   { icon: 'source', title: '근거가 궁금해요', text: '답마다 어느 논문 몇 쪽에서 왔는지 붙어요.' },
   { icon: 'code', title: '구현할 때 막혀요', text: '구현 관점을 고르면 입출력, 설정값, 주의점 위주로 답해요.' },
@@ -26,7 +26,7 @@ const PAINS = [
 // 시안의 "How does the first session go?" 단계
 const STEPS = [
   { title: '논문 모으기', text: 'PDF를 올리거나 Zotero 그룹을 연결하거나, 주제로 arXiv에서 찾아 팀 라이브러리에 모아요.' },
-  { title: '질문하기', text: '설명 수준(입문, 실무, 심화)과 관점(구현, 연구)을 고르고 물어보세요.' },
+  { title: '질문하기', text: '관점(구현, 연구)을 고르고 물어보세요. 어려우면 "더 쉽게", 더 알고 싶으면 "더 깊게"를 눌러요.' },
   { title: '근거 확인', text: '답 속 출처 표시를 누르면 논문과 쪽수, 근거 문장이 보여요.' },
 ]
 const step = ref(0)
@@ -89,7 +89,7 @@ async function submit() {
             <span class="grad-word">팀 논문을 쉽게 풀어 주는</span><br />
             Referoom이에요
           </h1>
-          <p class="hero-sub">팀이 모은 논문에서 근거를 찾아, 입문부터 심화까지 내 수준에 맞게 설명해 드려요.</p>
+          <p class="hero-sub">팀이 모은 논문에서 근거를 찾아, 어려우면 쉽게 더 알고 싶으면 깊게 설명해 드려요.</p>
           <div class="hero-actions">
             <RouterLink to="/signup" class="btn btn-primary">무료로 시작하기</RouterLink>
             <a href="#steps" class="btn btn-quiet more">더 알아보기</a>
@@ -189,7 +189,7 @@ async function submit() {
 
       <footer class="foot">
         <BrandLogo :size="24" />
-        <span>팀 논문 공동 관리와 수준별 이해를 돕는 서비스</span>
+        <span>팀 논문 공동 관리와 근거 기반 이해를 돕는 서비스</span>
       </footer>
     </div>
   </div>

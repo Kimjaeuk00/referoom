@@ -6,7 +6,7 @@ import { errorText } from '@/api/errors'
 import { useProfileStore } from '@/stores/profile'
 import { renderMarkdown } from '@/lib/markdown'
 import { formatDate, PAPER_STATUS, safeUrl, SOURCE_TYPE, toneOfTag } from '@/lib/format'
-import LevelViewSelector from '@/components/common/LevelViewSelector.vue'
+import ViewSelector from '@/components/common/ViewSelector.vue'
 import StatusBanner from '@/components/common/StatusBanner.vue'
 import ReviewBadge from '@/components/qa/ReviewBadge.vue'
 
@@ -16,7 +16,6 @@ const profile = useProfileStore()
 const paper = ref(null)
 const loadError = ref(null)
 
-const level = ref(profile.level)
 const view = ref(profile.view)
 const summary = ref(null)
 const summarizing = ref(false)
@@ -72,7 +71,7 @@ async function summarize() {
   try {
     summary.value = await api.rag('/summary', {
       method: 'POST',
-      json: { paper_id: paper.value.id, level: level.value, view: view.value },
+      json: { paper_id: paper.value.id, view: view.value },
       timeout: TIMEOUT.query,
     })
   } catch (e) {
@@ -110,7 +109,7 @@ async function summarize() {
           <h2 id="summary-title">구조 요약</h2>
           <p class="hint">이 논문 안에서만 찾아 섹션별로 정리하고, 섹션마다 근거 쪽수를 붙여요.</p>
           <div class="summary-controls">
-            <LevelViewSelector v-model:level="level" v-model:view="view" :disabled="summarizing" />
+            <ViewSelector v-model:view="view" :disabled="summarizing" />
             <button type="button" class="btn btn-primary" :disabled="summarizing || paper.status !== 'indexed'" @click="summarize">
               {{ summarizing ? '요약을 만드는 중' : summary ? '이 조건으로 다시 요약' : '구조 요약 보기' }}
             </button>
