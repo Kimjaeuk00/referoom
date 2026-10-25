@@ -23,9 +23,6 @@ public record SignupReqDTO(
     @Size(max = 100)
     String teamName,
 
-    @Pattern(regexp = "dev|rnd")
-    String teamType,
-
     @Size(max = 16)
     String teamCode
 

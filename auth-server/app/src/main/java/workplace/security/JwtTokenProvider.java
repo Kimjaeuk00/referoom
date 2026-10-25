@@ -15,8 +15,6 @@ import workplace.entity.Team;
 import workplace.entity.User;
 import workplace.enums.ErrorCode;
 import workplace.enums.Role;
-import workplace.enums.TeamType;
-import workplace.enums.ViewType;
 import workplace.exception.ApiException;
 
 @Component
@@ -38,8 +36,6 @@ public class JwtTokenProvider {
             .withClaimPresence("username")
             .withClaimPresence("role")
             .withClaimPresence("team_id")
-            .withClaimPresence("team_type")
-            .withClaimPresence("view")
             .withClaimPresence("iat")
             .withClaimPresence("exp")
             .build();
@@ -56,20 +52,15 @@ public class JwtTokenProvider {
             .withSubject(user.getId().toString())
             .withClaim("username", user.getUsername())
             .withClaim("role", user.getRole().name())
-            .withClaim("view", user.getEffectiveView().name())
             .withIssuedAt(issuedAt)
             .withExpiresAt(expiresAt);
 
         Team team = user.getTeam();
 
         if (team == null) {
-            builder
-                .withNullClaim("team_id")
-                .withNullClaim("team_type");
+            builder.withNullClaim("team_id");
         } else {
-            builder
-                .withClaim("team_id", team.getId())
-                .withClaim("team_type", team.getTeamType().name());
+            builder.withClaim("team_id", team.getId());
         }
 
         return builder.sign(algorithm);
@@ -94,10 +85,6 @@ public class JwtTokenProvider {
                 readRequiredString(jwt, "role")
             );
 
-            ViewType view = ViewType.valueOf(
-                readRequiredString(jwt, "view")
-            );
-
             long issuedAt = readPositiveInteger(jwt, "iat");
             long expiresAt = readPositiveInteger(jwt, "exp");
 
@@ -107,33 +94,18 @@ public class JwtTokenProvider {
                 );
             }
 
-            boolean teamIdIsNull = jwt.getClaim("team_id").isNull();
-            boolean teamTypeIsNull = jwt.getClaim("team_type").isNull();
-
-            if (teamIdIsNull != teamTypeIsNull) {
-                throw new IllegalArgumentException(
-                    "Invalid team claims"
-                );
-            }
-
+            // 관점(view)·팀 유형(team_type) claim은 읽지 않는다. 예전 토큰에 있어도 무시한다.
             Long teamId = null;
-            TeamType teamType = null;
 
-            if (!teamIdIsNull) {
+            if (!jwt.getClaim("team_id").isNull()) {
                 teamId = readPositiveInteger(jwt, "team_id");
-
-                teamType = TeamType.valueOf(
-                    readRequiredString(jwt, "team_type")
-                );
             }
 
             return new CustomPrincipal(
                 userId,
                 username,
                 role,
-                teamId,
-                teamType,
-                view
+                teamId
             );
         } catch (TokenExpiredException exception) {
             throw new ApiException(

@@ -18,7 +18,6 @@ import workplace.entity.Team;
 import workplace.entity.User;
 import workplace.enums.ErrorCode;
 import workplace.enums.Role;
-import workplace.enums.TeamType;
 import workplace.exception.ApiException;
 import workplace.repository.TeamRepository;
 import workplace.repository.UserRepository;
@@ -38,12 +37,11 @@ public class TeamService {
     private final JwtTokenProvider jwtTokenProvider;
 
     @Transactional
-    public Team createTeam(String name, TeamType teamType) {
+    public Team createTeam(String name) {
         String inviteCode = generateInviteCode();
 
         Team team = TeamConverter.toTeam(
             name,
-            teamType,
             inviteCode
         );
 

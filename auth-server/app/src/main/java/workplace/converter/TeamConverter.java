@@ -17,12 +17,12 @@ public final class TeamConverter {
 
     public static Team toTeam(
         String name,
-        TeamType teamType,
         String inviteCode
     ) {
         return Team.builder()
             .name(name)
-            .teamType(teamType)
+            // 팀 유형은 더 이상 쓰지 않는다. 컬럼(team_type)을 삭제하기 전까지 NOT NULL을 채우는 고정값이다.
+            .teamType(TeamType.dev)
             .inviteCode(inviteCode)
             .build();
     }
@@ -35,7 +35,6 @@ public final class TeamConverter {
         return UserResDTO.TeamInfo.builder()
             .id(team.getId())
             .name(team.getName())
-            .type(team.getTeamType())
             .build();
     }
 
@@ -48,7 +47,6 @@ public final class TeamConverter {
             TeamResDTO.TeamInfo.builder()
                 .id(team.getId())
                 .name(team.getName())
-                .type(team.getTeamType())
                 .memberCount(memberCount)
                 .inviteCode(inviteCode)
                 .build();
@@ -79,7 +77,6 @@ public final class TeamConverter {
             .username(user.getUsername())
             .displayName(user.getDisplayName())
             .role(user.getRole())
-            .view(user.getEffectiveView())
             .build();
     }
 

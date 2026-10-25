@@ -64,6 +64,7 @@ public class User {
     )
     private Role role = Role.member;
 
+    // 관점은 더 이상 쓰지 않는다. 컬럼(view_pref)을 삭제하기 전까지 매핑만 남긴다.
     @Enumerated(EnumType.STRING)
     @Column(
         name = "view_pref",
@@ -94,22 +95,4 @@ public class User {
         this.team = team;
         this.role = Role.member;
     }
-
-    public void updateProfile(ViewType viewPref) {
-        if (viewPref != null) {
-            this.viewPref = viewPref;
-        }
-    }
-
-    public ViewType getEffectiveView() {
-    if (viewPref != null) {
-        return viewPref;
-    }
-
-    if (team != null) {
-        return ViewType.valueOf(team.getTeamType().name());
-    }
-
-    return ViewType.dev;
-}
 }

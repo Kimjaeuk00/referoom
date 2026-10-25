@@ -4,12 +4,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import workplace.converter.UserConverter;
-import workplace.dto.req.UpdateProfileReqDTO;
 import workplace.dto.res.MeResDTO;
 import workplace.dto.res.TokenUserResDTO;
 import workplace.entity.User;
 import workplace.enums.ErrorCode;
-import workplace.enums.ViewType;
 import workplace.exception.ApiException;
 import workplace.repository.UserRepository;
 import workplace.security.JwtTokenProvider;
@@ -34,24 +32,14 @@ public class UserService {
     }
 
     @Transactional
-    public TokenUserResDTO updateProfile(
-        Long userId,
-        UpdateProfileReqDTO request
-    ) {
-        if (request.view() == null) {
-            throw new ApiException(
-                ErrorCode.VALIDATION_ERROR
-            );
-        }
-
+    public TokenUserResDTO updateProfile(Long userId) {
+        // 수정할 프로필 항목이 아직 없다. 최신 정보로 토큰만 다시 발급한다.
         User user = userRepository.findWithTeamById(userId)
             .orElseThrow(
                 () -> new ApiException(
                     ErrorCode.UNAUTHORIZED
                 )
             );
-
-        user.updateProfile(ViewType.valueOf(request.view()));
 
         String accessToken = jwtTokenProvider.createToken(user);
 

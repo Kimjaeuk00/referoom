@@ -6,15 +6,12 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import workplace.dto.req.UpdateProfileReqDTO;
 import workplace.dto.res.MeResDTO;
 import workplace.dto.res.TokenUserResDTO;
 import workplace.security.AuthCookieManager;
@@ -41,18 +38,16 @@ public class UserController {
     }
 
     @PatchMapping("/me/profile")
-    @Operation(summary = "내 수준 및 관점 변경")
+    @Operation(summary = "내 정보 갱신 후 토큰 재발급 (수정할 프로필 항목은 아직 없음)")
     @SecurityRequirement(name = "bearerAuth")
     public TokenUserResDTO updateProfile(
         @Parameter(hidden = true)
         @AuthenticationPrincipal CustomPrincipal principal,
-        @Valid @RequestBody UpdateProfileReqDTO request,
         HttpServletRequest servletRequest,
         HttpServletResponse servletResponse
     ) {
         TokenUserResDTO result = userService.updateProfile(
-            principal.userId(),
-            request
+            principal.userId()
         );
 
         authCookieManager.setAccessTokenCookie(

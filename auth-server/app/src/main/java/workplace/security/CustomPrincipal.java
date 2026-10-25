@@ -3,16 +3,12 @@ package workplace.security;
 import java.security.Principal;
 
 import workplace.enums.Role;
-import workplace.enums.TeamType;
-import workplace.enums.ViewType;
 
 public record CustomPrincipal(
     Long userId,
     String username,
     Role role,
-    Long teamId,
-    TeamType teamType,
-    ViewType view
+    Long teamId
 ) implements Principal {
 
     @Override

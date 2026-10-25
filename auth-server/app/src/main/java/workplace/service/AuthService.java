@@ -17,7 +17,6 @@ import workplace.entity.Team;
 import workplace.entity.User;
 import workplace.enums.ErrorCode;
 import workplace.enums.Role;
-import workplace.enums.TeamType;
 import workplace.exception.ApiException;
 import workplace.repository.UserRepository;
 import workplace.dto.req.LoginReqDTO;
@@ -53,8 +52,7 @@ public class AuthService {
 
             if (teamCreated) {
                 team = teamService.createTeam(
-                    request.teamName().strip(),
-                    TeamType.valueOf(request.teamType())
+                    request.teamName().strip()
                 );
 
                 role = Role.team_admin;
@@ -103,8 +101,7 @@ public class AuthService {
         }
 
         if ("create".equals(request.teamMode())) {
-            if (!StringUtils.hasText(request.teamName())
-                    || request.teamType() == null) {
+            if (!StringUtils.hasText(request.teamName())) {
                 throw new ApiException(ErrorCode.VALIDATION_ERROR);
             }
         }
