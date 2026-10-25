@@ -1,4 +1,5 @@
 import { ref, getCurrentScope, onScopeDispose } from 'vue';
+import { createMeterContext, watchMic } from '@/lib/micLevel';
 
 // Browser recording only. Upload and application processing belong to the caller.
 export function useRecorder() {
@@ -6,12 +7,23 @@ export function useRecorder() {
   const error = ref(null);
   const blob = ref(null);
   const mimeType = ref('');
+  // 녹음 중 입력 음량: level 0~1, speaking(목소리가 들어오는 중), silentMs(목소리가 없던 시간), meterOn(측정이 실제로 돌고 있음)
+  const level = ref(0);
+  const speaking = ref(false);
+  const silentMs = ref(0);
+  const meterOn = ref(false);
   let session = null;
   let generation = 0;
   let disposed = false;
 
   const release = (current) => {
     clearTimeout(current.timer);
+    current.stopMeter?.();
+    current.stopMeter = null;
+    level.value = 0;
+    speaking.value = false;
+    silentMs.value = 0;
+    meterOn.value = false;
     current.stream.getTracks().forEach((track) => track.stop());
   };
   const failure = (message) => new Error(message);
@@ -28,6 +40,8 @@ export function useRecorder() {
     blob.value = null;
     mimeType.value = '';
     let current;
+    // 마이크 권한을 묻기 전, 버튼을 누른 직후에 만들어야 브라우저가 오디오를 멈춰 두지 않는다
+    const meterContext = createMeterContext();
     try {
       if (!globalThis.isSecureContext) throw failure('마이크는 localhost 또는 HTTPS에서 사용해 주세요.');
       if (!globalThis.navigator?.mediaDevices?.getUserMedia || !globalThis.MediaRecorder) {
@@ -40,6 +54,7 @@ export function useRecorder() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (version !== generation || disposed) {
         stream.getTracks().forEach((track) => track.stop());
+        meterContext?.close?.()?.catch?.(() => {});
         return;
       }
       current = { stream, timer: null, chunks: [], finish: null, recorder: null };
@@ -81,10 +96,18 @@ export function useRecorder() {
         current.chunks = [];
       };
       recorder.start();
+      // 음량 측정은 보조 기능이다. 실패해도 녹음은 그대로 진행한다
+      current.stopMeter = watchMic(stream, (meter) => {
+        level.value = meter.level;
+        speaking.value = meter.speaking;
+        silentMs.value = meter.silentMs;
+        meterOn.value = meter.available;
+      }, { context: meterContext });
       state.value = 'recording';
       current.timer = setTimeout(() => { void stop().catch(() => {}); }, 60_000);
     } catch (cause) {
       if (current) { release(current); current.finish(null); }
+      else meterContext?.close?.()?.catch?.(() => {});
       if (version !== generation || disposed) return;
       error.value = cause?.name === 'NotAllowedError'
         ? failure('마이크 사용 권한을 허용해 주세요.')
@@ -128,5 +151,5 @@ export function useRecorder() {
   }
 
   if (getCurrentScope()) onScopeDispose(dispose);
-  return { state, error, blob, mimeType, start, stop, dispose };
+  return { state, error, blob, mimeType, level, speaking, silentMs, meterOn, start, stop, dispose };
 }

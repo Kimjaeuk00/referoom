@@ -7,7 +7,7 @@ import { scopeBody, useQaStore } from '@/stores/qa'
 import { useProfileStore } from '@/stores/profile'
 import { useLibraryStore } from '@/stores/library'
 import { toast } from '@/composables/useToast'
-import { audioFileName, audioUrl, MAX_RECORD_SECONDS, micErrorText, useAudioPlayer, useRecorder } from '@/lib/voice'
+import { audioFileName, audioUrl, BAR_WEIGHTS, barPx, MAX_RECORD_SECONDS, micErrorText, micFeedback, useAudioPlayer, useRecorder } from '@/lib/voice'
 import ScopeSelector from '@/components/qa/ScopeSelector.vue'
 import AnswerView from '@/components/qa/AnswerView.vue'
 import ViewSelector from '@/components/common/ViewSelector.vue'
@@ -45,6 +45,15 @@ const PHASE_TEXT = {
   thinking: '질문을 알아듣고 답변을 만드는 중이에요.',
   speaking: '답변을 읽는 중이에요.',
 }
+
+// 듣는 동안 마이크에 소리가 실제로 들어오는지: 막대는 입력 음량, 문구는 목소리 유무를 보여 준다
+const feedback = computed(() => micFeedback({ speaking: recorder.speaking.value, silentMs: recorder.silentMs.value }))
+const MIC_TEXT = {
+  hearing: '인식 중이에요',
+  waiting: '말씀해 주세요',
+  quiet: '소리가 들리지 않아요. 마이크 연결과 입력 볼륨을 확인해 주세요.',
+}
+const barHeight = (weight) => `${barPx(recorder.level.value, weight)}px`
 
 const clock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
@@ -144,6 +153,12 @@ onBeforeUnmount(() => {
           <span class="visually-hidden">{{ phase === 'listening' ? '말하기 끝' : '말하기 시작' }}</span>
         </button>
         <p class="phase" role="status">{{ PHASE_TEXT[phase] }}</p>
+        <div v-if="phase === 'listening' && recorder.meterOn.value" class="meter" :class="feedback">
+          <span class="bars" aria-hidden="true"><i v-for="(w, n) in BAR_WEIGHTS" :key="n" :style="{ height: barHeight(w) }" /></span>
+          <p class="mic-status" :role="feedback === 'quiet' ? 'alert' : undefined">{{ MIC_TEXT[feedback] }}</p>
+        </div>
+        <!-- 음량을 못 재는 환경: 숨기지 않고 알려 준다. 녹음 자체는 진행 중이다 -->
+        <p v-else-if="phase === 'listening'" class="mic-status">입력 음량은 표시할 수 없지만 녹음은 진행 중이에요.</p>
         <p v-if="phase === 'listening'" class="timer tabular">{{ clock(seconds) }} / {{ clock(MAX_RECORD_SECONDS) }}</p>
         <p v-if="error" class="field-error" role="alert">{{ error }}</p>
       </div>
@@ -264,6 +279,50 @@ h1 {
 
 .phase {
   font-weight: 500;
+}
+
+/* 입력 음량 표시: 막대는 들어오는 소리 크기, 문구는 인식 중 / 기다리는 중 / 소리 없음 */
+.meter {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+
+.bars {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bars i {
+  width: 5px;
+  border-radius: 3px;
+  background: var(--c-ink-muted);
+  transition: height 80ms linear, background-color 150ms;
+}
+
+.mic-status {
+  font-size: var(--fs-sm);
+  color: var(--c-ink-muted);
+}
+
+.meter.hearing .bars i {
+  background: var(--c-ok);
+}
+
+.meter.hearing .mic-status {
+  color: var(--c-ok);
+  font-weight: 600;
+}
+
+.meter.hearing .mic-status::before {
+  content: "● ";
+}
+
+.meter.quiet .mic-status {
+  color: var(--c-danger);
+  font-weight: 600;
 }
 
 .timer {
