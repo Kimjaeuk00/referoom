@@ -127,7 +127,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="voice">
     <aside class="controls" aria-label="질문 조건">
-      <ScopeSelector v-model:scope="qa.scope" :papers="library.allPapers" :tags="library.tags" />
+      <ScopeSelector v-model:scope="qa.scope" :papers="library.allPapers" />
     </aside>
 
     <section class="column">

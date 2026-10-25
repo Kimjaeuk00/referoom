@@ -2,16 +2,14 @@
 import { computed, ref } from 'vue'
 
 const props = defineProps({
-  scope: { type: Object, required: true }, // { type: 'all' } | { type: 'tag', tags } | { type: 'paper', ids }
+  scope: { type: Object, required: true }, // { type: 'all' } | { type: 'paper', ids }
   papers: { type: Array, default: () => [] },
-  tags: { type: Array, default: () => [] },
   pickedTitle: { type: String, default: '' }, // 목록을 아직 못 받았을 때 보여줄 논문 제목
 })
 const emit = defineEmits(['update:scope'])
 
 const MODES = [
   ['all', '팀 전체'],
-  ['tag', '태그로 좁히기'],
   ['paper', '논문 한 편'],
 ]
 
@@ -20,14 +18,7 @@ const search = ref('')
 
 function setMode(type) {
   if (type === mode.value) return
-  emit('update:scope', type === 'tag' ? { type, tags: [] } : type === 'paper' ? { type, ids: [] } : { type: 'all' })
-}
-
-function toggleTag(tag) {
-  const tags = new Set(props.scope.tags ?? [])
-  if (tags.has(tag)) tags.delete(tag)
-  else tags.add(tag)
-  emit('update:scope', { type: 'tag', tags: [...tags] })
+  emit('update:scope', type === 'paper' ? { type, ids: [] } : { type: 'all' })
 }
 
 const picked = computed(() => {
@@ -56,16 +47,6 @@ function pick(paper) {
           <input type="radio" name="scope-mode" :value="key" :checked="mode === key" @change="setMode(key)" />
           {{ name }}
         </label>
-      </div>
-
-      <div v-if="mode === 'tag'" class="sub">
-        <p v-if="!tags.length" class="hint">태그가 붙은 논문이 아직 없어요.</p>
-        <div v-else class="tag-picks">
-          <label v-for="t in tags" :key="t" class="tag-pick" :class="{ on: scope.tags?.includes(t) }">
-            <input type="checkbox" :checked="scope.tags?.includes(t)" @change="toggleTag(t)" />
-            {{ t }}
-          </label>
-        </div>
       </div>
 
       <div v-if="mode === 'paper'" class="sub">
@@ -114,36 +95,12 @@ fieldset {
   cursor: pointer;
 }
 
-.mode input,
-.tag-pick input {
+.mode input {
   accent-color: var(--c-accent);
 }
 
 .sub {
   margin-top: 4px;
-}
-
-.tag-picks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.tag-pick {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border: 1px solid var(--c-rule-strong);
-  border-radius: var(--radius-s);
-  background: var(--c-surface);
-  font-size: var(--fs-xs);
-  cursor: pointer;
-}
-
-.tag-pick.on {
-  border-color: var(--c-accent);
-  background: var(--c-accent-wash);
 }
 
 .picked {
