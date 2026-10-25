@@ -64,10 +64,8 @@ def token():
     def make(**changes):
         now = int(time.time())
         claims = dict(iss="simple-auth-server", sub="12", username="voice-tester",
-                      role="member", team_id=3, team_type="dev", view="rnd", iat=now, exp=now+3600)
+                      role="member", team_id=3, iat=now, exp=now+3600)
         claims.update(changes)
-        if claims["team_id"] is None:
-            claims["team_type"] = None
         return jwt.encode(claims, "voice-test-secret-0123456789-abcdefgh", algorithm="HS256")
     return make
 
