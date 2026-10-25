@@ -1,14 +1,14 @@
-"""v0.2 모드 전용 경로: 주제 제안(/topic-suggest), 원고 검증(/verify). 요약(/summary)도 이 파일에 더한다.
+"""v0.2 모드 전용 경로: 주제 제안(/topic-suggest), 원고 검증(/verify), 논문 요약(/summary).
 
 /rag-query는 router.py에 두고, 모드별 요청·응답 형식이 따로인 경로만 여기에 둔다.
 """
 from fastapi import APIRouter, Depends, Request
 from starlette.concurrency import run_in_threadpool
 
-from app.rag import topic, verify
+from app.rag import summary, topic, verify
 from app.rag.deps import CurrentUser, require_team, store
 from app.rag.errors import ApiError
-from app.rag.schemas import TopicRequest, TopicResponse, VerifyRequest, VerifyResponse
+from app.rag.schemas import SummaryRequest, SummaryResponse, TopicRequest, TopicResponse, VerifyRequest, VerifyResponse
 
 router = APIRouter()
 
@@ -38,5 +38,14 @@ async def verify_manuscript(request: Request, req: VerifyRequest, user: CurrentU
     _ready()
     usage: dict = {}
     resp = await run_in_threadpool(verify.run, req, user, usage)
+    _record_tokens(request, usage)
+    return resp
+
+
+@router.post("/summary", response_model=SummaryResponse, summary="논문 한 편을 섹션별로 요약", tags=["논문 요약"])
+async def summarize_paper(request: Request, req: SummaryRequest, user: CurrentUser = Depends(require_team)) -> SummaryResponse:
+    _ready()
+    usage: dict = {}
+    resp = await run_in_threadpool(summary.run, req, user, usage)
     _record_tokens(request, usage)
     return resp

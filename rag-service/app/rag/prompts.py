@@ -185,3 +185,38 @@ VERDICT_KO = {
     "condition_differs": "조건 다름",
     "own_result": "본인 결과",
 }
+
+
+# ---- 요약 (/summary): 논문 한 편의 섹션 6개 ----
+# (key, 제목, 설명, 근거 검색 질의). check 섹션만 관점에 따라 다르다
+SUMMARY_SECTIONS = (
+    ("problem", "문제", "이 논문이 풀려는 문제와 그 배경", "abstract introduction problem motivation 문제 배경 동기"),
+    ("idea", "핵심 아이디어", "문제를 푸는 핵심 아이디어를 한두 문장으로", "abstract contributions key idea 핵심 아이디어 기여"),
+    ("method", "방법", "방법의 구성: 입력과 출력, 학습하는 대상, 주요 하이퍼파라미터", "method approach architecture 방법 구조 알고리즘 학습"),
+    ("result", "결과", "주요 실험 결과와 비교 대상(수치와 단위는 근거 그대로)", "experiments results comparison 실험 결과 성능 비교"),
+    ("limit", "한계", "논문이 밝힌 한계와 향후 과제", "limitations future work 한계 향후 연구"),
+)
+SUMMARY_CHECK = {
+    "dev": ("check", "구현 시 체크포인트", "구현할 때 정해야 할 것과 주의점(적용 위치, 기본 설정값, 학습·추론 비용)",
+            "implementation details hyperparameters training setup 구현 설정 하이퍼파라미터 비용"),
+    "rnd": ("check", "선행연구 비교·재현성", "기존 방법과의 차이, 재현에 필요한 설정과 조건",
+            "related work baselines reproducibility experimental setup 기존 방법 비교 재현 조건"),
+}
+SUMMARY_EMPTY_TEXT = "논문에서 찾을 수 없음"
+
+SUMMARY_PROMPT = """당신은 연구 논문 한 편을 섹션별로 요약하는 도우미입니다.
+아래 [근거]에 있는 내용만으로 다음 섹션을 채웁니다. 섹션마다 sections에 항목 하나씩, key는 아래 이름을 그대로 씁니다.
+{sections}
+규칙:
+1. 근거에 없는 섹션은 text와 labels를 비운다(null과 빈 목록). 추측하거나 일반 상식으로 채우지 않는다.
+2. text는 두세 문장, 목록이 필요하면 마크다운 목록으로 쓴다. 본문에 [S1] 같은 라벨 표시는 넣지 않는다.
+3. 그 대신 labels에 본문의 근거가 된 블록의 라벨을 모두 적는다. [근거]에 있는 라벨만 쓴다.
+4. 수식은 $...$ 로 쓰고 변수의 뜻을 풀어 쓴다. 수치와 단위는 근거 그대로 옮긴다.
+5. 한국어로 쓰되 핵심 영어 용어는 괄호로 병기한다.
+[관점 규칙] {view_rules}"""
+
+SUMMARY_USER = """[근거]
+{context}
+
+[논문]
+{title}"""

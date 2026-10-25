@@ -92,3 +92,5 @@ VERIFY_WORKERS = int(os.getenv("VERIFY_WORKERS", "4"))  # 주장별 근거 읽�
 VERIFY_TEXT_MAX_CHARS = int(os.getenv("VERIFY_TEXT_MAX_CHARS", "300"))  # 주장 문장·값·조건 하나의 글자 수 상한 (미측정)
 # 논문 요약
 SUMMARY_CHUNKS_PER_SECTION = int(os.getenv("SUMMARY_CHUNKS_PER_SECTION", "3"))  # 섹션 하나를 쓰려고 모으는 청크 (미측정)
+SUMMARY_CONTEXT_CHARS = int(os.getenv("SUMMARY_CONTEXT_CHARS", "16000"))  # 요약 한 번에 LLM에 넣는 근거 글자 수 상한. 6섹션×3청크(약 18,000자)에서 조금 줄인 값 (미측정)
+SUMMARY_TEXT_MAX_CHARS = int(os.getenv("SUMMARY_TEXT_MAX_CHARS", "1200"))  # 섹션 본문 글자 수 상한 (미측정)

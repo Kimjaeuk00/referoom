@@ -227,6 +227,20 @@ class VerifyResponse(BaseModel):
 
 
 # ---- 논문 요약: POST /summary ----
+SummaryKey = Literal["problem", "idea", "method", "result", "limit", "check"]
+
+
+class SummarySectionDraft(BaseModel):
+    """LLM 구조화 출력: 요약 섹션 하나. 근거에 없으면 text와 labels를 비운다."""
+    key: SummaryKey
+    text: str | None = Field(default=None, description="근거에 있는 내용만으로 쓴 섹션 본문. 근거에 없으면 null")
+    labels: list[str] = Field(default_factory=list, description="본문의 근거가 된 블록의 라벨들. 예: [S1, S3]")
+
+
+class SummaryDraft(BaseModel):
+    sections: list[SummarySectionDraft] = Field(default_factory=list)
+
+
 class SummaryRequest(BaseModel):
     paper_id: StrictInt
     view: View | None = None
