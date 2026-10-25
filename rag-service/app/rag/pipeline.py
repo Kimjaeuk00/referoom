@@ -9,10 +9,10 @@ import re
 import time
 
 from app.rag import config_rag, llm, page_images
-from app.rag.context import Block, build_blocks, render_context
+from app.rag.context import LABEL_RE, Block, build_blocks, details_of, render_context, source_strings, verify_citations
 from app.rag.deps import CurrentUser, store
 from app.rag.prompts import IMAGE_NOTE, LEVEL_RULES, SYSTEM_PROMPT, USER_PROMPT, VIEW_RULES
-from app.rag.schemas import RagRequest, RagResponse, SourceDetail
+from app.rag.schemas import RagRequest, RagResponse
 
 logger = logging.getLogger("rag")
 
@@ -27,7 +27,9 @@ NOT_FOUND_ANSWER = "팀 라이브러리에서 관련 내용을 찾을 수 없습
 WITHHELD_ANSWER = ("표·그림·수식에 있는 값을 원본 페이지에서 확인하지 못해 수치는 답하지 않습니다. "
                    "아래 출처의 원본 페이지를 직접 확인해 주세요.")
 
-_LABEL_RE = re.compile(r"\[(S\d+)\]")
+_details = details_of  # 예전 이름 (모드 모듈은 context의 공용 이름을 쓴다)
+_source_strings = source_strings
+_LABEL_RE = LABEL_RE
 _MATH_RE = re.compile(r"\$|%|\d+\.\d+")
 # 이미지 재시도 조건: 답변에 백분율·소수·수식 기호·두 자리 이상 숫자가 있음
 _VALUE_RE = re.compile(r"\d+(\.\d+)?\s*%|\d+\.\d+|\$|\d{2,}")
@@ -35,43 +37,6 @@ _VALUE_RE = re.compile(r"\d+(\.\d+)?\s*%|\d+\.\d+|\$|\d{2,}")
 
 def _not_found(level: str, view: str) -> RagResponse:
     return RagResponse(answer=NOT_FOUND_ANSWER, handoff=True, level=level, view=view, latency_ms=0)
-
-
-def _details(blocks: list[Block]) -> list[SourceDetail]:
-    return [
-        SourceDetail(
-            label=b.label,
-            paper_id=b.paper_id,
-            title=b.title,
-            page=b.page,
-            url=b.url,
-            snippet=b.text[:200],
-        )
-        for b in blocks
-    ]
-
-
-def _source_strings(blocks: list[Block]) -> list[str]:
-    seen: list[str] = []
-    for b in blocks:
-        s = f"{b.title} p.{b.page}" if b.page is not None else b.title
-        if s not in seen:
-            seen.append(s)
-    return seen
-
-
-def verify_citations(answer: str, cited: list[str], blocks: list[Block]) -> tuple[list[Block], bool]:
-    """인용 검증. 반환: (출처로 쓸 블록, 인용 검증 실패 여부).
-
-    - 존재하지 않는 라벨을 인용했거나 본문에 라벨이 하나도 없으면 실패
-    - 검증된 라벨이 0개이면 컨텍스트 블록 전체를 출처로 돌려준다 (출처가 비지 않도록)
-    """
-    valid = {b.label for b in blocks}
-    in_answer = set(_LABEL_RE.findall(answer))
-    failed = (not in_answer) or any(c not in valid for c in cited) or any(l not in valid for l in in_answer)
-    ok = [c for c in dict.fromkeys(cited) if c in valid]
-    used = [b for b in blocks if b.label in ok] or blocks
-    return used, failed
 
 
 def needs_review(answer: str, used: list[Block], citation_failed: bool, top_score: float) -> bool:

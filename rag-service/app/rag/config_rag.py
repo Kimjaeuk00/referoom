@@ -67,3 +67,19 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")  # 30문항 비교
 # 후보의 관련도 = 주제 질의와 '제목+초록'의 bge-m3 코사인. 아래 값 미만은 low_relevance 경고만 붙이고 막지는 않는다
 TOPIC_MIN_RELEVANCE = float(os.getenv("TOPIC_MIN_RELEVANCE", "0.50"))  # 0.45→0.50: arXiv 후보 40건(질의 4개) 점수 0.43~0.74, 무관한 결과 0.43·0.47, 관련 결과 ≥0.53. 표본이 작아 후보가 쌓이면 다시 본다
 TOPIC_CACHE_SECONDS = int(os.getenv("TOPIC_CACHE_SECONDS", "600"))  # 검색한 후보를 /upload-topic이 다시 쓰도록 보관하는 시간
+
+# ---- v0.2 모드 (선행연구 정리표·주제 제안·원고 검증·논문 요약) ----
+# 아래 값은 호출 수·지연·비용의 상한을 정하는 시작값이다. 실제 논문으로 측정하기 전이라 '미측정'으로 표시하고, 측정하면 근거를 적어 바꾼다.
+# 선행연구: 논문마다 LLM 추출 1회 + 비교 답변 1회. 논문 수가 많을수록 호출이 늘어 병렬도와 근거량에 상한을 둔다
+PRIOR_MAX_PAPERS = int(os.getenv("PRIOR_MAX_PAPERS", "10"))  # 한 번에 비교할 논문 수. 프론트의 한 번에 수집·선택 상한(10)과 같다
+PRIOR_CHUNKS_PER_PAPER = int(os.getenv("PRIOR_CHUNKS_PER_PAPER", "4"))  # 논문당 근거 청크. 1000자 청크 4개 ≈ 4,000자 (미측정)
+PRIOR_WORKERS = int(os.getenv("PRIOR_WORKERS", "4"))  # 논문별 추출을 동시에 부르는 스레드 수. OpenAI 속도 제한에 걸리면 줄인다 (미측정)
+# 주제 제안
+TOPIC_MAX_PAPERS = int(os.getenv("TOPIC_MAX_PAPERS", "10"))  # 대상 논문 상한 (요청 검증과 같은 값)
+TOPIC_CHUNKS_PER_PAPER = int(os.getenv("TOPIC_CHUNKS_PER_PAPER", "3"))  # '한계·향후 연구' 질의로 논문당 모으는 청크 (미측정)
+TOPIC_SIMILAR_MIN_SCORE = float(os.getenv("TOPIC_SIMILAR_MIN_SCORE", "0.60"))  # 이 값 이상일 때만 '라이브러리 안의 유사 연구'로 보인다. REVIEW_SCORE와 같은 값에서 시작, 후보 질문-논문 점수 분포는 미측정
+# 원고 검증
+VERIFY_MAX_CLAIMS = int(os.getenv("VERIFY_MAX_CLAIMS", "12"))  # 한 원고에서 대조할 주장 수. 넘으면 앞에서부터 처리하고 warnings로 알린다 (원고 3,000자 기준 미측정)
+VERIFY_EVIDENCE_CHUNKS = int(os.getenv("VERIFY_EVIDENCE_CHUNKS", "3"))  # 주장마다 모으는 근거 청크 (미측정)
+# 논문 요약
+SUMMARY_CHUNKS_PER_SECTION = int(os.getenv("SUMMARY_CHUNKS_PER_SECTION", "3"))  # 섹션 하나를 쓰려고 모으는 청크 (미측정)
