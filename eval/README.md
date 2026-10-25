@@ -26,7 +26,7 @@ RAG 서비스를 같은 질문으로 반복 측정한다. 질문은 모드(`tuto
 
 ## 질문 형식
 
-공통 필드: `id`(전체에서 유일), `mode`, `type`, `question`, `view`(dev|rnd), `expected_answer`(사람이 읽는 기대 설명), `should_refuse`, `level`(위 설명).
+공통 필드: `id`(전체에서 유일), `mode`, `type`, `question`, `expected_answer`(사람이 읽는 기대 설명), `should_refuse`, `level`(위 설명).
 `mode`를 생략하면 tutor로 읽는다.
 
 | 모드 | `type` | 추가 필드 | 요청 |

@@ -70,10 +70,10 @@ def build_request(item: dict, top_k: int, paper_ids: list[int] | None = None) ->
     mode = item["mode"]
     if mode == "topic":
         return ENDPOINT[mode], {"paper_ids": paper_ids or [], "hint": item.get("hint", ""),
-                                "n": item.get("n", 3), "view": item["view"]}
+                                "n": item.get("n", 3)}
     if mode == "verify":
-        return ENDPOINT[mode], {"text": item["question"], "view": item["view"]}
-    body = {"question": item["question"], "view": item["view"], "top_k": top_k}
+        return ENDPOINT[mode], {"text": item["question"]}
+    body = {"question": item["question"], "top_k": top_k}
     if mode == "prior":
         body["mode"] = "prior"
     if item.get("level"):

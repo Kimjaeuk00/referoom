@@ -90,24 +90,24 @@ jq -n '{username: env.E2E_USERNAME, password: env.E2E_PASSWORD}' \
 jq -n '{username: env.E2E_OTHER_USERNAME, password: env.E2E_OTHER_PASSWORD}' \
     >"$WORK_DIR/other-login.json"
 jq -n --argjson paper_id "$E2E_PAPER_ID" '{
-    question: env.E2E_QUESTION, source: "pdf",
+    question: env.E2E_QUESTION,
     scope: {type: "paper", ids: [$paper_id]},
-    view: "dev", top_k: 5
+    top_k: 5
 }' >"$WORK_DIR/question.json"
 jq -n '{
-    question: env.E2E_OUT_OF_SCOPE_QUESTION, source: "all",
-    scope: {type: "all"}, view: "dev", top_k: 5
+    question: env.E2E_OUT_OF_SCOPE_QUESTION,
+    scope: {type: "all"}, top_k: 5
 }' >"$WORK_DIR/outside.json"
 
 jq -n --argjson paper_id "$E2E_PAPER_ID" '{
-    question: env.E2E_QUESTION, mode: "prior", source: "pdf",
-    scope: {type: "paper", ids: [$paper_id]}, view: "dev", top_k: 5
+    question: env.E2E_QUESTION, mode: "prior",
+    scope: {type: "paper", ids: [$paper_id]}, top_k: 5
 }' >"$WORK_DIR/prior.json"
-jq -n --argjson paper_id "$E2E_PAPER_ID" '{paper_ids: [$paper_id], hint: "", n: 2, view: "dev"}' \
+jq -n --argjson paper_id "$E2E_PAPER_ID" '{paper_ids: [$paper_id], hint: "", n: 2}' \
     >"$WORK_DIR/topic.json"
-jq -n --argjson paper_id "$E2E_PAPER_ID" '{text: env.E2E_VERIFY_TEXT, paper_ids: [$paper_id], view: "dev"}' \
+jq -n --argjson paper_id "$E2E_PAPER_ID" '{text: env.E2E_VERIFY_TEXT, paper_ids: [$paper_id]}' \
     >"$WORK_DIR/verify.json"
-jq -n --argjson paper_id "$E2E_PAPER_ID" '{paper_id: $paper_id, view: "dev"}' >"$WORK_DIR/summary.json"
+jq -n --argjson paper_id "$E2E_PAPER_ID" '{paper_id: $paper_id}' >"$WORK_DIR/summary.json"
 
 SCHEMA='
     type == "object"
@@ -117,7 +117,7 @@ SCHEMA='
     and (.needs_review | type == "boolean")
     and (.handoff | type == "boolean")
     and (.level == "L1" or .level == "L2" or .level == "L3")
-    and (.view == "dev" or .view == "rnd")
+    and (has("view") | not)
     and (.latency_ms | type == "number" and . >= 0 and . == floor)
 '
 

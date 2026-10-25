@@ -37,7 +37,7 @@ def test_questions_file_is_valid():
     qs = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
     assert len(qs) == 30 and sum(q["should_refuse"] for q in qs) == 6
     assert len({q["id"] for q in qs}) == 30  # id 중복 없음
-    required = {"id", "type", "question", "level", "view", "expected_answer", "key_points", "evidence", "should_refuse"}
+    required = {"id", "type", "question", "level", "expected_answer", "key_points", "evidence", "should_refuse"}
     assert all(required <= set(q) for q in qs)
     assert all(q["evidence"] and q["evidence"]["pages"] for q in qs if not q["should_refuse"])
 
