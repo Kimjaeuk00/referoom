@@ -20,7 +20,7 @@ Java는 JWT를 발급하며 모든 AI 요청을 중계하는 프록시가 아니
 - `auth-server/`: Spring Boot 인증 API 11개, JPA 엔티티·저장소, JWT·CORS·Swagger, Dockerfile·환경변수 예시.
 - `common-py/`: 설치 가능한 `referoom-common` 패키지와 공통 모듈 테스트.
 - `db/migrations/001_users.sql`, `002_teams_users.sql`, `900_dev_seed.sql`: 회원·팀 DB 최초 초기화와 개발 시드.
-- `scripts/e2e_check.sh`: 실제 Java 로그인과 RAG 인증·출처·팀 격리 점검.
+- `scripts/e2e_check.sh`: 실제 Java 로그인과 RAG 인증·출처·팀 격리 점검(1~5단계), 새 모드 선행연구·주제·검증·요약과 새 모드의 팀 격리(6~10단계).
 - `scripts/ops_report.py`: 공통 JSON 로그의 지연·토큰·비용 집계.
 
 RAG·데이터·음성·프론트 코드의 연결은 각 담당자가 진행한다. 루트 Compose·환경변수 예시·README 취합은 배포 담당 범위이며, 이 문서 작성만으로 전체 배포가 완료된 것은 아니다.
@@ -389,7 +389,8 @@ DB 중지 시 503은 별도 격리된 테스트 DB에서 확인한다. 기존 �
 - Java `/api/health`와 RAG `/health`가 정상이어야 한다.
 - 주 계정은 팀에 가입하고, 지정한 PDF가 그 팀에만 적재되어 있어야 한다.
 - 시드를 적용한 테스트 DB라면 주 계정은 개발팀 `demo_admin`, 다른 팀 계정은 R&D팀 `demo_rnd_admin`을 사용한다. 두 계정의 실제 소속도 확인한다. `demo_solo`는 미가입 계정이므로 팀 격리 계정을 대신할 수 없다.
-- 실제 숫자 paper ID, 그 논문에서 답할 수 있는 질문, 전체 라이브러리 밖 질문을 준비한다.
+- 실제 숫자 paper ID, 그 논문에서 답할 수 있는 질문, 전체 라이브러리 밖 질문, 그 논문의 수치를 담은 원고 한두 문장(`E2E_VERIFY_TEXT`)을 준비한다.
+- 6~9단계는 모드당 한 번씩 실제 LLM을 호출한다(요청 1회 대략 입력 3천~7천·출력 5백~1천 토큰). 새 모드 응답이 팀 밖 논문 id에 내용을 주지 않는지는 10단계가 본다(`/summary`만 404 `NOT_FOUND`, 나머지는 `handoff`).
 - common-py 적용과 실제 저장소·LLM 준비를 끝내고, 아래 자리표시자를 실제 테스트 값으로 바꾼다. JWT_SECRET을 이 스크립트에 줄 필요는 없다.
 
 저장소 루트에서 환경을 준비한다. `read -s`에서는 입력 문자가 화면에 보이지 않는다.
@@ -403,6 +404,7 @@ export E2E_OTHER_USERNAME=demo_rnd_admin
 export E2E_PAPER_ID='실제_숫자_ID로_교체'
 export E2E_QUESTION='지정한 논문에서 답할 수 있는 실제 질문으로 교체'
 export E2E_OUT_OF_SCOPE_QUESTION='라이브러리 전체에 근거가 없는 실제 질문으로 교체'
+export E2E_VERIFY_TEXT='지정한 논문의 수치를 담은 원고 문장으로 교체'
 
 printf '주 계정 비밀번호: '
 read -r -s E2E_PASSWORD
@@ -475,8 +477,8 @@ python3 scripts/ops_report.py /tmp/referoom-rag.log \
 **남은 작업**
 
 - RAG·데이터·음성 담당자가 common-py를 자신의 앱·오류·권한·로그에 적용하고 실제 저장소와 연결.
-- 실제 PDF·두 팀 계정으로 `scripts/e2e_check.sh` 실행. 현재 필수 1~5단계의 실제 RAG 통합 PASS 기록은 없다.
-- 실제 서비스 로그로 `scripts/ops_report.py` 실행하여 지연·토큰·비용·로그 점검 결과 확보. 현재 실제 로그 실행은 하지 않았다.
+- `scripts/e2e_check.sh`는 2026-10-25에 임시 키·시험 계정 2개(서로 다른 팀)·실제 LLM으로 1~10단계 모두 PASS했다(시드 색인의 LoRA 논문 기준). 시험 계정·팀·임시 키는 삭제했다. 답변 의미 정확성은 이 스크립트가 보지 않는다.
+- `scripts/ops_report.py`는 같은 시험의 실제 RAG 로그로 실행해 `/rag-query`·`/topic-suggest`·`/verify`·`/summary`가 경로별로 집계되고, 단가를 넣으면 측정분 비용이 나오는 것을 확인했다(`/rag-query`는 튜터와 선행연구가 한 줄로 합쳐진다). 실제 운영 수치와 월 예상 비용은 아직 없다.
 - 배포 담당과 전체 Compose·서비스명 통신·헬스체크·DB/FAISS/모델 캐시 영속성 확인. 전체 Compose 성공 기록은 아직 없다.
 - 선택 음성 STT→RAG→TTS, 전체 평가셋·개선 전후·운영 수치·발표 자료는 각 담당 결과와 함께 최종 점검.
 

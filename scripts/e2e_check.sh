@@ -29,9 +29,10 @@ export E2E_OTHER_PASSWORD="${E2E_OTHER_PASSWORD:-}"
 export E2E_PAPER_ID="${E2E_PAPER_ID:-}"
 export E2E_QUESTION="${E2E_QUESTION:-}"
 export E2E_OUT_OF_SCOPE_QUESTION="${E2E_OUT_OF_SCOPE_QUESTION:-}"
+export E2E_VERIFY_TEXT="${E2E_VERIFY_TEXT:-}"
 
 for name in E2E_PASSWORD E2E_OTHER_USERNAME E2E_OTHER_PASSWORD \
-    E2E_PAPER_ID E2E_QUESTION E2E_OUT_OF_SCOPE_QUESTION; do
+    E2E_PAPER_ID E2E_QUESTION E2E_OUT_OF_SCOPE_QUESTION E2E_VERIFY_TEXT; do
     [[ -n "${!name}" ]] || fail "$name 환경변수를 설정하세요."
 done
 
@@ -97,6 +98,16 @@ jq -n '{
     question: env.E2E_OUT_OF_SCOPE_QUESTION, source: "all",
     scope: {type: "all"}, view: "dev", top_k: 5
 }' >"$WORK_DIR/outside.json"
+
+jq -n --argjson paper_id "$E2E_PAPER_ID" '{
+    question: env.E2E_QUESTION, mode: "prior", source: "pdf",
+    scope: {type: "paper", ids: [$paper_id]}, view: "dev", top_k: 5
+}' >"$WORK_DIR/prior.json"
+jq -n --argjson paper_id "$E2E_PAPER_ID" '{paper_ids: [$paper_id], hint: "", n: 2, view: "dev"}' \
+    >"$WORK_DIR/topic.json"
+jq -n --argjson paper_id "$E2E_PAPER_ID" '{text: env.E2E_VERIFY_TEXT, paper_ids: [$paper_id], view: "dev"}' \
+    >"$WORK_DIR/verify.json"
+jq -n --argjson paper_id "$E2E_PAPER_ID" '{paper_id: $paper_id, view: "dev"}' >"$WORK_DIR/summary.json"
 
 SCHEMA='
     type == "object"
@@ -169,4 +180,76 @@ check_json '다른 팀에 논문·출처 비노출' '
 '
 
 printf '[PASS] 필수 API E2E 1~5단계 완료\n'
+
+# 새 모드는 단계마다 실제 LLM을 호출하므로 모드당 한 번씩만 부른다.
+JSON_HEADER='Content-Type: application/json'
+PRIOR_COLUMNS='["problem","method","dataset","metric","result","limitation"]'
+
+# 6. 선행연구: 지정 논문의 정리표 6칸, 값이 있는 칸은 출처 라벨이 source_details에 있어야 한다.
+http '6. 선행연구 정리표' 200 POST "$RAG_URL/rag-query" \
+    --header "@$WORK_DIR/primary.headers" --header "$JSON_HEADER" --data-binary "@$WORK_DIR/prior.json"
+check_json '선행연구 응답 기본 형식' "$SCHEMA"
+check_json '선행연구 표: 지정 논문 한 행·6칸 키' '
+    .handoff == false and (.table | type == "array" and length >= 1)
+    and any(.table[]; .paper_id == $paper_id)
+    and all(.table[]; . as $row | all($cols[]; . as $c | $row | has($c)) and (.labels | type == "object"))
+' --argjson paper_id "$E2E_PAPER_ID" --argjson cols "$PRIOR_COLUMNS"
+check_json '선행연구 칸의 근거 라벨 일치' '
+    [.source_details[].label] as $known
+    | all(.table[]; . as $row | all($cols[]; . as $c | ($row[$c] == null) or ($known | index($row.labels[$c]) != null)))
+' --argjson cols "$PRIOR_COLUMNS"
+
+# 7. 주제: 후보는 AI 생성 표시와 근거 한계 라벨을 가져야 한다.
+http '7. 주제 후보 제안' 200 POST "$RAG_URL/topic-suggest" \
+    --header "@$WORK_DIR/primary.headers" --header "$JSON_HEADER" --data-binary "@$WORK_DIR/topic.json"
+check_json '주제 후보 수·검토 표시' '
+    .handoff == false and .needs_review == true and (.topics | type == "array" and length >= 1)
+'
+check_json '주제 후보 AI 표시·근거 라벨 일치' '
+    [.source_details[].label] as $known
+    | all(.topics[]; .ai_generated == true and (.based_on | length >= 1)
+        and all(.based_on[]; . as $l | $known | index($l) != null))
+'
+
+# 8. 검증: 판정은 정해진 값 안에서만, 근거가 필요한 판정에는 라벨이 있어야 한다.
+http '8. 원고 검증' 200 POST "$RAG_URL/verify" \
+    --header "@$WORK_DIR/primary.headers" --header "$JSON_HEADER" --data-binary "@$WORK_DIR/verify.json"
+check_json '검증 응답 형식' '
+    .needs_review == true and (.claims | type == "array" and length >= 1)
+    and (.draft | type == "string") and (.warnings | type == "array")
+'
+check_json '검증 판정 값 집합·근거 라벨' '
+    [.source_details[].label] as $known
+    | all(.claims[];
+        (.verdict | IN("match","mismatch","condition_differs","not_found","own_result"))
+        and ((.verdict | IN("match","mismatch","condition_differs") | not)
+            or ((.labels | length >= 1) and all(.labels[]; . as $l | $known | index($l) != null))))
+'
+
+# 9. 요약: 여섯 섹션이 정해진 순서로 있어야 한다.
+http '9. 논문 요약' 200 POST "$RAG_URL/summary" \
+    --header "@$WORK_DIR/primary.headers" --header "$JSON_HEADER" --data-binary "@$WORK_DIR/summary.json"
+check_json '요약 6섹션·검토 표시' '
+    .paper_id == $paper_id and .needs_review == true
+    and ([.sections[].key] == ["problem","idea","method","result","limit","check"])
+    and all(.sections[]; .text | type == "string")
+' --argjson paper_id "$E2E_PAPER_ID"
+
+# 10. 다른 팀 토큰으로 같은 논문 id를 새 모드에 보내도 내용이 나오지 않아야 한다.
+http '10. 다른 팀의 선행연구' 200 POST "$RAG_URL/rag-query" \
+    --header "@$WORK_DIR/other.headers" --header "$JSON_HEADER" --data-binary "@$WORK_DIR/prior.json"
+check_json '다른 팀 선행연구 비노출' '
+    .handoff == true and (.table == null or (.table | length == 0)) and (.source_details | length == 0)
+'
+http '다른 팀의 주제 제안' 200 POST "$RAG_URL/topic-suggest" \
+    --header "@$WORK_DIR/other.headers" --header "$JSON_HEADER" --data-binary "@$WORK_DIR/topic.json"
+check_json '다른 팀 주제 비노출' '.handoff == true and (.topics | length == 0) and (.source_details | length == 0)'
+http '다른 팀의 원고 검증' 200 POST "$RAG_URL/verify" \
+    --header "@$WORK_DIR/other.headers" --header "$JSON_HEADER" --data-binary "@$WORK_DIR/verify.json"
+check_json '다른 팀 검증 비노출' '.handoff == true and (.claims | length == 0) and (.source_details | length == 0)'
+http '다른 팀의 요약' 404 POST "$RAG_URL/summary" \
+    --header "@$WORK_DIR/other.headers" --header "$JSON_HEADER" --data-binary "@$WORK_DIR/summary.json"
+check_json '다른 팀 요약 오류 코드' '.code == "NOT_FOUND"'
+
+printf '[PASS] 필수 API E2E 1~10단계 완료\n'
 printf '[INFO] 브라우저 화면·답변 의미 정확성·LLM 미호출 로그·선택 음성은 별도 확인\n'
