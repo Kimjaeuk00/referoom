@@ -125,9 +125,12 @@ function openPapers() {
         <button class="send" type="submit" :disabled="!canSend" aria-label="질문 보내기"><Icon name="send" :size="18" /></button>
       </form>
 
-      <ModeChips v-if="qa.researchOn" :model-value="qa.mode" @update:model-value="qa.setMode" />
-      <p v-if="reasonText" id="home-reason" class="note" role="status">{{ reasonText }}</p>
-      <p v-else-if="spec.hint" class="note">{{ spec.hint }}</p>
+      <!-- 연구 모드를 켜고 끌 때 입력창이 움직이지 않도록 칩과 안내 문구의 자리를 항상 잡아 둔다 -->
+      <div class="mode-area">
+        <ModeChips v-if="qa.researchOn" :model-value="qa.mode" @update:model-value="qa.setMode" />
+        <p v-if="reasonText" id="home-reason" class="note" role="status">{{ reasonText }}</p>
+        <p v-else-if="spec.hint" class="note">{{ spec.hint }}</p>
+      </div>
 
       <p v-if="library.isEmpty" class="note">
         팀 라이브러리가 아직 비어 있어요. <button type="button" class="link" @click="topicOpen = true">주제로 논문 찾기</button>로 먼저 논문을 모아 주세요.
@@ -173,6 +176,15 @@ function openPapers() {
   justify-items: center;
   gap: 28px;
   text-align: center;
+}
+
+.mode-area {
+  width: 100%;
+  min-height: 72px;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 12px;
 }
 
 /* 가는 테두리 숫자 카드 */
