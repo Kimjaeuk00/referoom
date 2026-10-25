@@ -53,8 +53,7 @@ async function load() {
 }
 
 function refreshAll() {
-  load()
-  library.refresh()
+  return Promise.all([load(), library.refresh()]) // 둘 다 실패해도 던지지 않는다(load는 error에 담고 refresh는 allSettled)
 }
 
 let debounce
@@ -104,9 +103,9 @@ async function confirmDelete() {
   deleting.value = true
   try {
     await api.rag(`/papers/${encodeURIComponent(paper.id)}`, { method: 'DELETE' })
-    toast('논문을 삭제했어요.')
+    await refreshAll() // 목록에서 사라진 뒤에 알린다
+    toast('논문을 삭제했어요. Zotero 휴지통에서 복구할 수 있어요.')
     pendingDelete.value = null
-    refreshAll()
   } catch (e) {
     toast(errorText(e), { tone: 'error' })
   } finally {
@@ -190,7 +189,7 @@ function openPaper(paper) {
     <ConfirmDialog
       :open="Boolean(pendingDelete)"
       title="논문을 삭제할까요?"
-      :message="pendingDelete ? `'${pendingDelete.title}'과 색인된 청크가 함께 지워져요. 되돌릴 수 없어요.` : ''"
+      :message="pendingDelete ? `'${pendingDelete.title}'을(를) Zotero 휴지통으로 옮기고 색인된 청크를 지워요. Zotero에서 복구할 수 있어요.` : ''"
       confirm-label="삭제"
       danger
       :busy="deleting"

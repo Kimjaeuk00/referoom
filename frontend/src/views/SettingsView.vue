@@ -8,27 +8,27 @@ import { useProfileStore } from '@/stores/profile'
 import { toast } from '@/composables/useToast'
 import { formatDateTime } from '@/lib/format'
 import { TEAM_TYPES } from '@/lib/levels'
-import LevelViewSelector from '@/components/common/LevelViewSelector.vue'
+import ViewSelector from '@/components/common/ViewSelector.vue'
 
 const auth = useAuthStore()
 const profile = useProfileStore()
 const router = useRouter()
 
 // 프로필: 저장하면 응답의 새 토큰으로 바꿔야 AI 서비스에 반영된다(DEV_02 4.5).
-// PATCH /api/me/profile은 level·view만 받는다(DEV_01 4.5). 표시 이름은 가입할 때 정한 값을 보여 주기만 한다.
-const form = reactive({ level: profile.level, view: profile.view })
+// PATCH /api/me/profile에는 view만 보낸다(level은 서버에 남아 있지만 v0.2에서는 화면에서 다루지 않는다). 표시 이름은 가입할 때 정한 값을 보여 주기만 한다.
+const form = reactive({ view: profile.view })
 const saving = ref(false)
 const profileError = ref('')
 watch(
-  () => [profile.level, profile.view],
-  ([level, view]) => Object.assign(form, { level, view }),
+  () => profile.view,
+  (view) => (form.view = view),
 )
 
 async function saveProfile() {
   saving.value = true
   profileError.value = ''
   try {
-    await profile.updateProfile({ level: form.level, view: form.view })
+    await profile.updateProfile({ view: form.view })
     toast('프로필을 저장했어요. 다음 질문부터 반영돼요.')
   } catch (e) {
     profileError.value = errorText(e)
@@ -57,55 +57,14 @@ async function copyInvite() {
   }
 }
 
-// Zotero(관리자): 저장한 키는 다시 보여 주지 않는다. 입력칸은 항상 비워 둔다.
+// Zotero(관리자): 연결 설정(그룹 ID·API Key)은 서버의 .env로만 관리한다. 여기서는 연결 상태만 보여 준다.
 const zotero = ref(null)
-const zForm = reactive({ groupId: '', apiKey: '' })
-const zBusy = ref(false)
-const zError = ref('')
 
 async function loadZotero() {
   try {
     zotero.value = await api.rag('/zotero/config')
   } catch {
     zotero.value = null
-  }
-}
-
-async function saveZotero() {
-  zError.value = ''
-  const groupId = Number(zForm.groupId.trim())
-  if (!zForm.groupId.trim() || !zForm.apiKey.trim()) {
-    zError.value = '그룹 ID와 API Key를 모두 입력하세요.'
-    return
-  }
-  if (!Number.isInteger(groupId) || groupId <= 0) {
-    zError.value = '그룹 ID는 숫자예요. Zotero 그룹 주소의 groups/ 뒤 숫자를 넣으세요.'
-    return
-  }
-  zBusy.value = true
-  try {
-    await api.rag('/zotero/config', { method: 'POST', json: { group_id: groupId, api_key: zForm.apiKey.trim() } })
-    toast('Zotero 연결을 확인하고 저장했어요.')
-    await loadZotero()
-  } catch (e) {
-    zError.value = errorText(e)
-  } finally {
-    zForm.apiKey = ''
-    zBusy.value = false
-  }
-}
-
-async function disconnectZotero() {
-  zBusy.value = true
-  zError.value = ''
-  try {
-    await api.rag('/zotero/config', { method: 'DELETE' })
-    toast('Zotero 연결을 해제했어요.')
-    await loadZotero()
-  } catch (e) {
-    zError.value = errorText(e)
-  } finally {
-    zBusy.value = false
   }
 }
 
@@ -132,7 +91,7 @@ onMounted(() => {
           <div><dt>표시 이름</dt><dd>{{ profile.displayName }}</dd></div>
           <div><dt>아이디</dt><dd>{{ auth.user?.username ?? auth.claims?.username }}</dd></div>
         </dl>
-        <LevelViewSelector v-model:level="form.level" v-model:view="form.view" />
+        <ViewSelector v-model:view="form.view" />
         <p v-if="profileError" class="field-error" role="alert">{{ profileError }}</p>
         <div><button class="btn btn-primary" type="submit" :disabled="saving">{{ saving ? '저장하는 중' : '프로필 저장' }}</button></div>
       </form>
@@ -156,27 +115,12 @@ onMounted(() => {
 
     <section v-if="auth.isAdmin" class="block" aria-labelledby="s-zotero">
       <h2 id="s-zotero">Zotero 연결</h2>
-      <p class="hint">팀 Zotero 그룹 라이브러리를 연결하면 라이브러리 화면에서 동기화할 수 있어요. 저장한 API Key는 다시 보여 주지 않아요.</p>
       <p v-if="zotero?.group_id != null" class="state">
         그룹 {{ zotero.group_id }}에 연결됨 <span class="hint">마지막 동기화 {{ formatDateTime(zotero.last_synced_at) }}</span>
       </p>
-      <form class="form" autocomplete="off" @submit.prevent="saveZotero">
-        <div class="row">
-          <div class="field">
-            <label class="label" for="z-group">그룹 ID</label>
-            <input id="z-group" v-model="zForm.groupId" class="input" inputmode="numeric" />
-          </div>
-          <div class="field">
-            <label class="label" for="z-key">API Key</label>
-            <input id="z-key" v-model="zForm.apiKey" class="input" type="password" autocomplete="new-password" :placeholder="zotero?.group_id != null ? '등록됨 (바꾸려면 새로 입력)' : ''" />
-          </div>
-        </div>
-        <p v-if="zError" class="field-error" role="alert">{{ zError }}</p>
-        <div class="actions">
-          <button class="btn btn-primary" type="submit" :disabled="zBusy">{{ zBusy ? '확인하는 중' : '연결 확인 후 저장' }}</button>
-          <button v-if="zotero?.group_id != null" type="button" class="btn btn-danger" :disabled="zBusy" @click="disconnectZotero">연결 해제</button>
-        </div>
-      </form>
+      <p v-else-if="zotero" class="state">연결되지 않았어요.</p>
+      <p v-else class="hint">연결 상태를 불러오지 못했어요.</p>
+      <p class="hint">Zotero 그룹과 API Key는 서버 설정(.env)에서 관리해요. 바꾸려면 서버 담당자에게 요청하세요. 동기화는 팀 라이브러리 화면에서 해요.</p>
     </section>
 
     <section class="block" aria-labelledby="s-account">

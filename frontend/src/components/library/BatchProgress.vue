@@ -3,16 +3,16 @@ import { computed } from 'vue'
 import { BATCH_ITEM_STATUS } from '@/lib/format'
 
 // GET /ingest/batches/{id} 응답(DEV_03 5.1):
-// { id, kind, status: running|done|failed|rolled_back, requested, indexed, skipped, failed, papers: [{ paper_id, title, status, chunk_count, error_msg? }] }
+// { id, kind: upload_pdf|topic|zotero_sync, status: running|done|failed, requested, indexed, skipped, failed, removed, error_msg, papers: [{ paper_id, title, status, chunk_count, error_msg? }] }
+// removed: 동기화로 색인에서 지운 논문 수, error_msg: 배치 전체가 실패한 이유(예: Zotero에 연결하지 못함)
 const props = defineProps({ batch: { type: Object, required: true } })
 
 const finished = computed(() => props.batch.indexed + props.batch.skipped + props.batch.failed)
 const headline = computed(() => {
-  const { status, requested, indexed, skipped, failed } = props.batch
+  const { status, requested, indexed, skipped, failed, removed } = props.batch
   if (status === 'running') return `색인하는 중이에요 (${finished.value}/${requested})`
-  if (status === 'rolled_back') return '이번 수집을 되돌렸어요. 추가됐던 논문과 청크를 지웠어요.'
   if (status === 'failed') return '색인하지 못했어요'
-  const parts = [`${indexed}건 완료`, skipped && `${skipped}건 건너뜀`, failed && `${failed}건 실패`].filter(Boolean)
+  const parts = [`${indexed}건 완료`, skipped && `${skipped}건 건너뜀`, failed && `${failed}건 실패`, removed && `${removed}건 색인에서 제거`].filter(Boolean)
   return `색인을 마쳤어요. ${parts.join(', ')}`
 })
 </script>
@@ -21,9 +21,10 @@ const headline = computed(() => {
   <div class="batch" :class="batch.status">
     <div class="head">
       <p role="status">{{ headline }}</p>
-      <progress v-if="batch.status !== 'rolled_back'" :max="batch.requested || 1" :value="finished" :aria-label="headline" />
+      <progress :max="batch.requested || 1" :value="finished" :aria-label="headline" />
     </div>
-    <ul v-if="batch.papers?.length && batch.status !== 'rolled_back'" class="items">
+    <p v-if="batch.error_msg" class="reason" role="alert">{{ batch.error_msg }}</p>
+    <ul v-if="batch.papers?.length" class="items">
       <li v-for="item in batch.papers" :key="item.paper_id ?? item.title">
         <span class="status" :class="item.status">{{ BATCH_ITEM_STATUS[item.status] ?? item.status }}</span>
         <span class="title">{{ item.title }}</span>

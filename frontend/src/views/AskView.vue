@@ -6,20 +6,23 @@ import { useProfileStore } from '@/stores/profile'
 import { useLibraryStore } from '@/stores/library'
 import { toast } from '@/composables/useToast'
 import { clampSide, isNarrow, SIDE_DEFAULT, SIDE_MAX, SIDE_MIN, sideOpen, sideWidth } from '@/composables/useSidePanel'
-import { LEVEL_ORDER, LEVELS, levelLabel, VIEWS } from '@/lib/levels'
+import { depthNote, VIEWS } from '@/lib/levels'
+import { MODES } from '@/lib/modes'
+import { useModeInput } from '@/composables/useModeInput'
+import { useVerifyConsent } from '@/composables/useVerifyConsent'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { toneOfLabel } from '@/lib/format'
+import PriorScopeBar from '@/components/qa/PriorScopeBar.vue'
+import ModeChips from '@/components/qa/ModeChips.vue'
 import PaperPicker from '@/components/qa/PaperPicker.vue'
-import AnswerView from '@/components/qa/AnswerView.vue'
-import StatusBanner from '@/components/common/StatusBanner.vue'
+import TurnResult from '@/components/qa/TurnResult.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Icon from '@/components/common/Icon.vue'
 import UploadDropzone from '@/components/library/UploadDropzone.vue'
 import TopicSearchModal from '@/components/library/TopicSearchModal.vue'
 import MicButton from '@/components/voice/MicButton.vue'
-import SpeakButton from '@/components/voice/SpeakButton.vue'
 import { voiceAvailable } from '@/lib/voice'
 
-const MAX = 1000
 const QUICK = [
   'LoRA는 왜 파라미터를 적게 학습해도 되나요?',
   '어텐션에서 √d_k로 나누는 이유는?',
@@ -43,8 +46,7 @@ const question = ref('')
 const topicOpen = ref(false)
 const thread = ref(null)
 
-// 수준·관점의 처음 값은 내 프로필. 여기서 바꾼 값은 질문에만 쓰이고 프로필은 설정 화면에서 바꾼다.
-const level = computed({ get: () => qa.level ?? profile.level, set: (v) => (qa.level = v) })
+// 관점의 처음 값은 내 프로필. 여기서 바꾼 값은 질문에만 쓰이고 프로필은 설정 화면에서 바꾼다.
 const view = computed({ get: () => qa.view ?? profile.view, set: (v) => (qa.view = v) })
 
 // 왼쪽 목록에서 고른 논문 = 질문 범위. 하나도 없으면 팀 전체.
@@ -54,14 +56,18 @@ const pickedIds = computed({
 })
 
 const initial = computed(() => (profile.displayName || '?').slice(0, 1).toUpperCase())
-const trimmed = computed(() => question.value.trim())
-const canSend = computed(() => trimmed.value.length >= 2 && trimmed.value.length <= MAX && !qa.busy)
+const { spec, trimmed, reasonText, canSend, max } = useModeInput(question)
+const consent = useVerifyConsent()
+// 검증은 논문을 고르지 않으면 전체 라이브러리와 비교한다
+const modeHint = computed(() => (qa.mode === 'verify' && !pickedIds.value.length ? `${spec.value.hint} 논문을 고르지 않으면 전체 라이브러리에서 찾아요.` : spec.value.hint))
 const history = computed(() => [...qa.turns].reverse())
 
 onMounted(() => {
   library.refresh()
   // 논문 상세의 "이 논문에 질문하기"로 들어오면 범위를 그 논문으로 맞춘다
   if (route.query.paper) qa.scope = { type: 'paper', ids: [Number(route.query.paper)] }
+  // 논문 상세의 "이 논문으로 주제 찾기"
+  if (route.query.mode) qa.setMode(route.query.mode)
 })
 
 function scopeText(params) {
@@ -75,8 +81,15 @@ function scopeText(params) {
   return text
 }
 
+// 관점과, 더 쉽게/더 깊게로 다시 물었으면 그 표시 (예: '구현 관점, 쉬운 설명')
+function viewNote(params) {
+  const depth = depthNote(params.level)
+  return `${VIEWS[params.view]?.name ?? ''} 관점${depth ? `, ${depth}` : ''}`
+}
+
 function describe(params) {
-  return `${levelLabel(params.level)}, ${VIEWS[params.view]?.name ?? ''} 관점, ${scopeText(params)}`
+  const mode = params.mode && params.mode !== 'tutor' ? `${MODES[params.mode].label}, ` : ''
+  return `${mode}${viewNote(params)}, ${scopeText(params)}`
 }
 
 function scrollToTurn(turn, block = 'start') {
@@ -84,9 +97,18 @@ function scrollToTurn(turn, block = 'start') {
   document.getElementById(`turn-${turn.id}`)?.scrollIntoView({ block, behavior: reduce ? 'auto' : 'smooth' })
 }
 
-async function send() {
+function send() {
   if (!canSend.value) return
-  const turn = qa.ask(trimmed.value, { source: qa.source, scope: qa.scope, level: level.value, view: view.value })
+  consent.guard(qa.mode, submit) // 검증은 처음 한 번 외부 LLM 전송 고지를 보여 준다
+}
+
+async function submit() {
+  if (qa.needsCollect) {
+    qa.priorPending = trimmed.value // 논문을 모으는 창을 열고, 모이면 이어서 보낸다
+    question.value = ''
+    return
+  }
+  const turn = qa.ask(trimmed.value, { source: qa.source, scope: qa.scope, view: view.value })
   if (!turn) return
   question.value = ''
   if (isNarrow()) sideOpen.value = false // 좁은 화면에서는 서랍을 닫고 답을 보여 준다
@@ -111,6 +133,44 @@ function onKeydown(event) {
   if (event.key !== 'Enter' || event.shiftKey || event.isComposing || event.keyCode === 229) return
   event.preventDefault()
   send()
+}
+
+// 선행연구: 논문을 모으는 창. 모이면 그 논문들을 조사 범위로 삼아 보류한 질문을 보낸다.
+const collectOpen = computed(() => topicOpen.value || Boolean(qa.priorPending))
+const collectQuery = computed(() => qa.priorPending ?? trimmed.value)
+
+function closeCollect() {
+  if (qa.priorPending) question.value = qa.priorPending // 취소하면 질문을 입력창에 돌려 준다
+  qa.priorPending = null
+  topicOpen.value = false
+}
+
+async function onCollected(ids) {
+  const pending = qa.priorPending
+  if (!pending) return
+  qa.priorPending = null
+  if (!ids.length) {
+    question.value = pending
+    toast('수집된 논문이 없어요. 다른 검색어로 다시 찾아 보세요.', { tone: 'error' })
+    return
+  }
+  qa.priorScope = ids
+  const turn = qa.ask(pending, { source: qa.source, scope: qa.scope, view: view.value })
+  if (!turn) return
+  await nextTick()
+  scrollToTurn(turn)
+}
+
+// 검증에서 근거를 못 찾은 주장: 선행연구 모드로 바꾸고 그 대상 이름을 검색어로 넣는다
+function collectFor(claim) {
+  qa.setMode('prior')
+  qa.priorScope = []
+  question.value = claim.subject || claim.sentence
+}
+
+function research(turn) {
+  qa.priorScope = []
+  qa.priorPending = turn.question
 }
 
 function addPaper(turn) {
@@ -181,7 +241,7 @@ function turnState(turn) {
         <button v-for="turn in history" :key="turn.id" type="button" class="card" @click="scrollToTurn(turn)">
           <span class="card-q">{{ turn.question }}</span>
           <span class="card-meta">
-            {{ levelLabel(turn.params.level) }}, {{ VIEWS[turn.params.view]?.name }} 관점
+            {{ viewNote(turn.params) }}
             <time class="card-time tabular" :datetime="turn.askedAt.toISOString()">{{ timeFmt.format(turn.askedAt) }}</time>
           </span>
           <span v-if="turnState(turn)" class="card-state">{{ turnState(turn) }}</span>
@@ -216,13 +276,10 @@ function turnState(turn) {
       <div class="control-bar" role="group" aria-label="질문 조건">
         <span v-if="!sideOpen && pickedIds.length" class="picked-note">논문 {{ pickedIds.length }}편에서 찾는 중</span>
         <div class="control">
-          <span class="section-label">설명 수준</span>
-          <div class="segmented">
-            <button v-for="key in LEVEL_ORDER" :key="key" type="button" :aria-pressed="level === key" :title="LEVELS[key].desc" @click="level = key">
-              {{ LEVELS[key].name }}
-            </button>
-          </div>
+          <span class="section-label">모드</span>
+          <ModeChips :model-value="qa.mode" @update:model-value="qa.setMode" />
         </div>
+        <PriorScopeBar v-if="qa.mode === 'prior'" />
         <div class="control">
           <span class="section-label">관점</span>
           <div class="segmented">
@@ -274,22 +331,17 @@ function turnState(turn) {
             <span class="avatar brand" aria-hidden="true"><Icon name="bookmark" :size="18" /></span>
             <div class="msg-body">
               <p class="who">Referoom <span class="meta">{{ describe(turn.params) }}</span></p>
-              <div v-if="turn.status === 'loading'" class="pending">
-                <div class="skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
-                <p class="hint">{{ turn.slow ? '조금 더 걸리고 있어요.' : '근거를 찾고 답변을 쓰는 중이에요.' }}</p>
-              </div>
-              <StatusBanner v-else-if="turn.status === 'error'" :message="turn.error.message" :retry="turn.error.retryable" @retry="qa.retry(turn)" />
-              <AnswerView
-                v-else
-                :result="turn.result"
-                :params="turn.params"
+              <TurnResult
+                :turn="turn"
                 :busy="qa.busy"
+                @retry="qa.retry(turn)"
                 @reask="(change) => reask(turn, change)"
                 @add-paper="addPaper(turn)"
                 @ask-team="askTeam(turn)"
-              >
-                <SpeakButton v-if="voiceAvailable" :text="turn.result.answer" />
-              </AnswerView>
+                @research="research(turn)"
+                @pick-papers="setSide(true)"
+                @collect="collectFor"
+              />
             </div>
           </div>
         </article>
@@ -302,9 +354,10 @@ function turnState(turn) {
             id="question"
             v-model="question"
             class="composer-input"
-            rows="2"
-            :maxlength="MAX"
-            placeholder="논문에 대해 궁금한 점을 적어 주세요. Enter로 보내고 Shift+Enter로 줄을 바꿔요."
+            :rows="qa.mode === 'verify' ? 6 : 2"
+            :maxlength="max"
+            :placeholder="qa.mode === 'tutor' ? '논문에 대해 궁금한 점을 적어 주세요. Enter로 보내고 Shift+Enter로 줄을 바꿔요.' : `${spec.placeholder}. Enter로 보내고 Shift+Enter로 줄을 바꿔요.`"
+            :aria-describedby="reasonText ? 'composer-reason' : undefined"
             @keydown="onKeydown"
           ></textarea>
           <div class="composer-foot">
@@ -314,17 +367,27 @@ function turnState(turn) {
             <button type="button" class="icon-btn" title="주제로 논문 찾기" aria-label="주제로 논문 찾기" @click="topicOpen = true">
               <Icon name="topic" />
             </button>
-            <span class="count hint tabular" :class="{ over: trimmed.length > MAX }">{{ trimmed.length }} / {{ MAX }}자</span>
+            <span class="count hint tabular" :class="{ over: trimmed.length > max }">{{ trimmed.length }} / {{ max.toLocaleString('ko-KR') }}자</span>
             <MicButton v-if="voiceAvailable" compact :disabled="qa.busy" @transcript="question = $event" />
             <button class="send" type="submit" :disabled="!canSend" :aria-label="qa.busy ? '답변을 기다리는 중' : '질문 보내기'">
               <Icon name="send" :size="18" />
             </button>
           </div>
         </div>
+        <p v-if="modeHint" class="hint mode-note">{{ modeHint }}</p>
+        <p v-if="reasonText" id="composer-reason" class="hint mode-note" role="status">{{ reasonText }}</p>
       </form>
     </section>
 
-    <TopicSearchModal :open="topicOpen" :initial-query="trimmed" @close="topicOpen = false" @done="library.refresh()" />
+    <ConfirmDialog
+      :open="consent.open.value"
+      title="원고를 외부 AI로 보내요"
+      message="입력한 원고가 외부 LLM으로 전송돼요. 로그와 색인에는 저장하지 않아요."
+      confirm-label="동의하고 보내기"
+      @confirm="consent.confirm"
+      @cancel="consent.cancel"
+    />
+    <TopicSearchModal :open="collectOpen" :initial-query="collectQuery" @close="closeCollect" @done="library.refresh()" @collected="onCollected" />
   </div>
 </template>
 
@@ -663,12 +726,6 @@ function turnState(turn) {
   margin-top: 12px;
 }
 
-.pending {
-  max-width: 62ch;
-  display: grid;
-  gap: 12px;
-}
-
 .composer {
   position: sticky;
   bottom: 0;
@@ -688,6 +745,10 @@ function turnState(turn) {
 .composer-box:focus-within {
   border-color: var(--c-accent-2);
   box-shadow: 0 0 0 1px var(--c-accent-2);
+}
+
+.mode-note {
+  margin: 6px 4px 0;
 }
 
 .composer-input {

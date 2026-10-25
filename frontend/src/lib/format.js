@@ -1,7 +1,7 @@
 export const PAPER_STATUS = { pending: '색인 중', indexed: '색인 완료', failed: '실패' }
 export const BATCH_ITEM_STATUS = { pending: '대기', indexed: '완료', failed: '실패', skipped: '건너뜀' }
 
-// 배치 상태가 running이 아니면 끝난 것(done | failed | rolled_back, DEV_03 5.1)
+// 배치 상태가 running이 아니면 끝난 것(done | failed)
 export const isBatchDone = (batch) => Boolean(batch) && batch.status !== 'running'
 export const SOURCE_TYPE = { zotero: 'Zotero', pdf: 'PDF', web: '웹 수집' }
 

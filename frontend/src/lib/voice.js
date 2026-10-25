@@ -1,16 +1,23 @@
-import { BASE_URL } from '@/api/client'
+import { computed } from 'vue'
+import { apiBlob, BASE_URL } from '@/api/client'
 
 export { speakable } from './format'
 
-// 녹음·재생 composable은 음성 담당 파일이다(폴더 소유권 가이드, DEV_04 7절). 프론트는 가져다 쓰기만 하고,
-// 파일이 아직 없으면 음성 메뉴와 버튼을 숨긴다. 반환 모양은 문서에 이름이 없어서 아래처럼 가정했다.
-// 실제 파일과 다르면 이 파일만 고치면 된다.
-//   useRecorder()    → { state: Ref<'idle'|'recording'|'processing'|'error'>, start(): Promise, stop(): Promise<Blob> }
-//   useAudioPlayer() → { playing: Ref<boolean>, play(url): Promise, stop() }   // url은 Bearer로 받을 /audio/{id} 전체 주소
+// 녹음·재생 composable은 음성 담당 파일이다(composables/useRecorder.js, useAudioPlayer.js). 프론트는 가져다 쓰기만 하고,
+// 파일이 아직 없으면 음성 메뉴와 버튼을 숨긴다. 실제 파일의 모양이 달라지면 이 파일만 고치면 된다.
+//   useRecorder()    → { state: Ref<'idle'|'recording'|'processing'|'error'>, start(): Promise, stop(): Promise<Blob> }  (그대로 쓴다)
+//   원본 useAudioPlayer({ apiBlob, baseUrl }) → { state: Ref<'idle'|'loading'|'playing'|'error'>, play(경로|전체 주소), stop(), dispose() }
+//   화면에 내놓는 useAudioPlayer()            → 위에 playing(= state가 'playing') 을 더한 것. apiBlob(Bearer·401 처리)과 baseUrl은 여기서 넣어 준다.
 const modules = import.meta.glob(['../composables/useRecorder.js', '../composables/useAudioPlayer.js'], { eager: true })
 
 export const useRecorder = modules['../composables/useRecorder.js']?.useRecorder ?? null
-export const useAudioPlayer = modules['../composables/useAudioPlayer.js']?.useAudioPlayer ?? null
+const createPlayer = modules['../composables/useAudioPlayer.js']?.useAudioPlayer ?? null
+export const useAudioPlayer = createPlayer
+  ? () => {
+      const player = createPlayer({ apiBlob, baseUrl: BASE_URL.voice })
+      return { ...player, playing: computed(() => player.state.value === 'playing') }
+    }
+  : null
 export const voiceAvailable = Boolean(useRecorder && useAudioPlayer)
 
 export const MAX_RECORD_SECONDS = 60

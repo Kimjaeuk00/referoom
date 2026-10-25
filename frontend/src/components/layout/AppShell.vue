@@ -4,7 +4,6 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useProfileStore } from '@/stores/profile'
 import { USE_MOCK } from '@/api/client'
-import { levelLabel } from '@/lib/levels'
 import { toast } from '@/composables/useToast'
 import { voiceAvailable } from '@/lib/voice'
 import Icon from '@/components/common/Icon.vue'
@@ -80,7 +79,7 @@ onBeforeUnmount(() => clearTimeout(expiryTimer))
       <RouterLink :to="auth.hasTeam ? '/' : '/settings'" class="wordmark" aria-label="Referoom"><BrandLogo :size="26" /></RouterLink>
 
       <nav id="app-menu" ref="menu" popover class="menu" aria-label="주 메뉴">
-        <p class="menu-who">{{ profile.displayName }} <span>{{ levelLabel(profile.level) }}</span></p>
+        <p class="menu-who">{{ profile.displayName }} <span v-if="profile.team">{{ profile.team.name }}</span></p>
         <template v-if="auth.hasTeam">
           <RouterLink to="/" exact-active-class="router-link-active">홈</RouterLink>
           <RouterLink to="/ask">질문하기</RouterLink>
@@ -101,7 +100,7 @@ onBeforeUnmount(() => clearTimeout(expiryTimer))
         <span v-if="USE_MOCK" class="mock" title="VITE_USE_MOCK=true: 서버 대신 목업 응답을 씁니다">목업 데이터</span>
         <RouterLink v-if="auth.hasTeam" to="/library" class="icon-btn" aria-label="팀 라이브러리" title="팀 라이브러리"><Icon name="library" /></RouterLink>
         <RouterLink to="/settings" class="icon-btn" aria-label="설정" title="설정"><Icon name="settings" /></RouterLink>
-        <button type="button" class="avatar" popovertarget="app-menu" :title="`${profile.displayName}, ${levelLabel(profile.level)}`">
+        <button type="button" class="avatar" popovertarget="app-menu" :title="profile.team ? `${profile.displayName}, ${profile.team.name}` : profile.displayName">
           <span aria-hidden="true">{{ initial }}</span>
           <span class="visually-hidden">메뉴 열기: {{ profile.displayName }}</span>
         </button>

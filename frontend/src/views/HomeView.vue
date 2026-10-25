@@ -5,16 +5,19 @@ import { useQaStore } from '@/stores/qa'
 import { useProfileStore } from '@/stores/profile'
 import { useLibraryStore } from '@/stores/library'
 import { sideOpen } from '@/composables/useSidePanel'
-import { LEVELS, VIEWS } from '@/lib/levels'
+import { VIEWS } from '@/lib/levels'
+import { useModeInput } from '@/composables/useModeInput'
+import { useVerifyConsent } from '@/composables/useVerifyConsent'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { voiceAvailable } from '@/lib/voice'
 import Icon from '@/components/common/Icon.vue'
-import LevelViewSelector from '@/components/common/LevelViewSelector.vue'
+import ModeChips from '@/components/qa/ModeChips.vue'
+import ViewSelector from '@/components/common/ViewSelector.vue'
 import TopicSearchModal from '@/components/library/TopicSearchModal.vue'
 import MicButton from '@/components/voice/MicButton.vue'
 import { formatDate } from '@/lib/format'
 
 // 로그인 뒤 첫 화면: 인사말 하나와 질문 입력창 하나. 보내면 질문하기 화면으로 넘어가 답을 받는다.
-const MAX = 1000
 const EXAMPLES = ['LoRA는 왜 파라미터를 적게 학습해도 되나요?', '어텐션에서 √d_k로 나누는 이유는?']
 
 const qa = useQaStore()
@@ -28,10 +31,8 @@ const plusMenu = ref(null)
 const condMenu = ref(null)
 const topicOpen = ref(false)
 
-const level = computed({ get: () => qa.level ?? profile.level, set: (v) => (qa.level = v) })
 const view = computed({ get: () => qa.view ?? profile.view, set: (v) => (qa.view = v) })
-const trimmed = computed(() => question.value.trim())
-const canSend = computed(() => trimmed.value.length >= 2 && trimmed.value.length <= MAX && !qa.busy)
+const { spec, trimmed, reasonText, canSend, max } = useModeInput(question)
 const name = computed(() => profile.displayName)
 
 // 시안의 기울어진 파스텔 숫자 카드: 우리 팀 라이브러리의 실제 숫자
@@ -59,9 +60,22 @@ function closeMenus(event) {
   for (const d of [plusMenu.value, condMenu.value]) if (d?.open && !d.contains(event.target)) d.open = false
 }
 
+const consent = useVerifyConsent()
+
 function send() {
   if (!canSend.value) return
-  const turn = qa.ask(trimmed.value, { source: qa.source, scope: qa.scope, level: level.value, view: view.value })
+  consent.guard(qa.mode, submit) // 검증은 처음 한 번 외부 LLM 전송 고지를 보여 준다
+}
+
+function submit() {
+  if (qa.needsCollect) {
+    // 선행연구: 질문 화면에서 논문을 먼저 모은 뒤 이어서 보낸다
+    qa.priorPending = trimmed.value
+    question.value = ''
+    router.push({ name: 'ask' })
+    return
+  }
+  const turn = qa.ask(trimmed.value, { source: qa.source, scope: qa.scope, view: view.value })
   if (turn) router.push({ name: 'ask' })
 }
 
@@ -101,26 +115,30 @@ function openPapers() {
           v-model="question"
           class="q-input"
           rows="1"
-          :maxlength="MAX"
-          placeholder="논문에 대해 궁금한 점을 물어보세요"
+          :maxlength="max"
+          :placeholder="spec.placeholder"
+          :aria-describedby="reasonText ? 'home-reason' : undefined"
           @keydown="onKeydown"
         ></textarea>
 
-        <!-- 시안의 "Pro 높음" 자리: 설명 수준과 관점 -->
+        <!-- 시안의 "Pro 높음" 자리: 답변 관점 (모드 칩은 입력창 아래) -->
         <details ref="condMenu" class="menu-wrap">
           <summary class="cond">
-            <span class="cond-level">{{ LEVELS[level]?.name }}</span>
-            <span class="cond-view">{{ VIEWS[view]?.name }}</span>
+            <span class="cond-view">{{ VIEWS[view]?.name }} 관점</span>
             <Icon name="chevron" :size="18" />
           </summary>
           <div class="pop cond-pop">
-            <LevelViewSelector v-model:level="level" v-model:view="view" />
+            <ViewSelector v-model:view="view" />
           </div>
         </details>
 
         <MicButton v-if="voiceAvailable" compact :disabled="qa.busy" @transcript="question = $event" />
         <button class="send" type="submit" :disabled="!canSend" aria-label="질문 보내기"><Icon name="send" :size="18" /></button>
       </form>
+
+      <ModeChips :model-value="qa.mode" @update:model-value="qa.setMode" />
+      <p v-if="reasonText" id="home-reason" class="note" role="status">{{ reasonText }}</p>
+      <p v-else-if="spec.hint" class="note">{{ spec.hint }}</p>
 
       <p v-if="library.isEmpty" class="note">
         팀 라이브러리가 아직 비어 있어요. <button type="button" class="link" @click="topicOpen = true">주제로 논문 찾기</button>로 먼저 논문을 모아 주세요.
@@ -140,6 +158,14 @@ function openPapers() {
     </div>
 
     <TopicSearchModal :open="topicOpen" :initial-query="trimmed" @close="topicOpen = false" @done="library.refresh()" />
+    <ConfirmDialog
+      :open="consent.open.value"
+      title="원고를 외부 AI로 보내요"
+      message="입력한 원고가 외부 LLM으로 전송돼요. 로그와 색인에는 저장하지 않아요."
+      confirm-label="동의하고 보내기"
+      @confirm="consent.confirm"
+      @cancel="consent.cancel"
+    />
   </div>
 </template>
 
@@ -263,12 +289,8 @@ function openPapers() {
   background: var(--c-surface);
 }
 
-.cond-level {
-  font-weight: 500;
-}
-
 .cond-view {
-  color: var(--c-ink-muted);
+  font-weight: 500;
 }
 
 /* 작은 메뉴: 알약 아래로 펼친다 */
@@ -314,7 +336,7 @@ function openPapers() {
   padding: 16px;
 }
 
-/* 수준·관점 고르기 안의 버튼은 메뉴 항목 모양을 따르지 않는다 */
+/* 관점 고르기 안의 버튼은 메뉴 항목 모양을 따르지 않는다 */
 .cond-pop :deep(.segmented button) {
   display: inline-flex;
   padding: 0 12px;

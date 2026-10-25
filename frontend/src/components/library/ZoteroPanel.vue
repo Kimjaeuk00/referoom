@@ -1,6 +1,5 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
 import { api } from '@/api/client'
 import { errorText } from '@/api/errors'
 import { usePolling } from '@/composables/usePolling'
@@ -20,7 +19,7 @@ const error = ref('')
 const starting = ref(false)
 const batchId = ref(null)
 
-// 설정 조회 응답 모양은 문서에 없어서 group_id가 있으면 연결된 것으로 본다
+// GET /zotero/config → { configured, group_id, last_synced_at }. 연결되지 않았으면 group_id가 null이다
 const connected = computed(() => config.value?.group_id != null)
 
 const { data: batch, running: polling, error: pollError, start } = usePolling(
@@ -45,7 +44,7 @@ async function sync() {
   starting.value = true
   error.value = ''
   try {
-    const data = await api.rag('/zotero/sync', { method: 'POST', json: { full: false } })
+    const data = await api.rag('/zotero/sync', { method: 'POST' })
     batchId.value = data.batch_id
     start()
   } catch (e) {
@@ -65,7 +64,7 @@ watch(() => props.isAdmin, (admin) => admin && loadConfig(), { immediate: true }
       <template v-if="props.isAdmin">
         <p v-if="!config && !error" class="hint">연결 상태를 확인하는 중이에요.</p>
         <p v-else-if="config && !connected" class="state">
-          연결되지 않았어요. <RouterLink to="/settings">설정에서 연결하기</RouterLink>
+          연결되지 않았어요. <span class="hint">서버 설정(.env)에 Zotero 그룹이 필요해요.</span>
         </p>
         <p v-else-if="config" class="state">
           그룹 {{ config.group_id }}에 연결됨

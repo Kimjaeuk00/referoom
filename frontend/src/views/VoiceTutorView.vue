@@ -10,10 +10,10 @@ import { toast } from '@/composables/useToast'
 import { audioFileName, audioUrl, MAX_RECORD_SECONDS, micErrorText, useAudioPlayer, useRecorder } from '@/lib/voice'
 import ScopeSelector from '@/components/qa/ScopeSelector.vue'
 import AnswerView from '@/components/qa/AnswerView.vue'
-import LevelViewSelector from '@/components/common/LevelViewSelector.vue'
+import ViewSelector from '@/components/common/ViewSelector.vue'
 
 // 음성 튜터(DEV_04 7절): 말로 묻고 → POST /voice-qa 한 번에 인식·답변·합성 → 답을 읽어 준다.
-// 수준·관점·범위는 Q&A 화면과 같은 값을 쓴다.
+// 관점·범위는 Q&A 화면과 같은 값을 쓴다.
 const qa = useQaStore()
 const profile = useProfileStore()
 const library = useLibraryStore()
@@ -21,7 +21,6 @@ const router = useRouter()
 const recorder = useRecorder()
 const player = useAudioPlayer()
 
-const level = computed({ get: () => qa.level ?? profile.level, set: (v) => (qa.level = v) })
 const view = computed({ get: () => qa.view ?? profile.view, set: (v) => (qa.view = v) })
 
 const thinking = ref(false)
@@ -75,13 +74,12 @@ async function ask() {
     const blob = await recorder.stop()
     const form = new FormData()
     form.append('audio', blob, audioFileName(blob))
-    form.append('level', level.value)
     form.append('view', view.value)
     form.append('source', qa.source)
     const scope = scopeBody(qa.scope)
     if (scope) form.append('scope', JSON.stringify(scope))
     form.append('speak', 'true')
-    const params = { level: level.value, view: view.value, source: qa.source, scope: qa.scope }
+    const params = { view: view.value, source: qa.source, scope: qa.scope }
     const result = await api.voice('/voice-qa', { method: 'POST', formData: form, timeout: TIMEOUT.voice })
     qa.voiceTurns.push({ id: ++seq, question: result.stt_text, result, params })
     thinking.value = false
@@ -128,7 +126,7 @@ onBeforeUnmount(() => {
   <div class="voice">
     <aside class="controls" aria-label="질문 조건">
       <ScopeSelector v-model:source="qa.source" v-model:scope="qa.scope" :papers="library.allPapers" :tags="library.tags" />
-      <LevelViewSelector v-model:level="level" v-model:view="view" :disabled="phase === 'listening' || phase === 'thinking'" />
+      <ViewSelector v-model:view="view" :disabled="phase === 'listening' || phase === 'thinking'" />
     </aside>
 
     <section class="column">
