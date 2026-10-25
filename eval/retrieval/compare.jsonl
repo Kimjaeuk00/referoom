@@ -1,0 +1,16 @@
+{"id": "C01", "question": "QLoRA와 Prefix-Tuning의 차이점은 무엇인가요?", "papers": ["QLoRA", "Prefix-Tuning"], "split": "design"}
+{"id": "C02", "question": "프롬프트 튜닝과 프리픽스 튜닝은 무엇이 다른가요?", "papers": ["Prompt Tuning", "Prefix-Tuning"], "split": "design"}
+{"id": "C03", "question": "LoRA와 어댑터 방식은 추론 지연 면에서 어떻게 다른가요?", "papers": ["LoRA: Low-Rank", "Parameter-Efficient Transfer"], "split": "design"}
+{"id": "C04", "question": "Q LoRA와 LoRA의 차이점은?", "papers": ["QLoRA", "LoRA: Low-Rank"], "split": "design"}
+{"id": "C05", "question": "어댑터와 Prefix-Tuning 중 어느 쪽이 학습 파라미터가 더 적나요?", "papers": ["Parameter-Efficient Transfer", "Prefix-Tuning"], "split": "design"}
+{"id": "C06", "question": "LoRA와 Prompt Tuning은 각각 무엇을 학습하나요?", "papers": ["LoRA: Low-Rank", "Prompt Tuning"], "split": "design"}
+{"id": "C07", "question": "QLoRA와 어댑터 튜닝은 메모리 측면에서 어떻게 다른가요?", "papers": ["QLoRA", "Parameter-Efficient Transfer"], "split": "design"}
+{"id": "C08", "question": "RETA-LLM은 LoRA 같은 미세조정 방법과 목적이 어떻게 다른가요?", "papers": ["RETA-LLM", "LoRA: Low-Rank"], "split": "design"}
+{"id": "C09", "question": "How does QLoRA differ from prefix-tuning?", "papers": ["QLoRA", "Prefix-Tuning"], "split": "holdout"}
+{"id": "C10", "question": "어댑터와 프롬프트 튜닝은 어떻게 다른가요?", "papers": ["Parameter-Efficient Transfer", "Prompt Tuning"], "split": "holdout"}
+{"id": "C11", "question": "LoRA와 QLoRA 중 메모리를 더 아끼는 것은 무엇인가요?", "papers": ["LoRA: Low-Rank", "QLoRA"], "split": "holdout"}
+{"id": "C12", "question": "프리픽스 튜닝과 LoRA는 모델 가중치를 다루는 방식이 어떻게 다른가요?", "papers": ["Prefix-Tuning", "LoRA: Low-Rank"], "split": "holdout"}
+{"id": "C13", "question": "QLoRA, LoRA, 어댑터 세 방법의 학습 파라미터 규모를 비교해 주세요.", "papers": ["QLoRA", "LoRA: Low-Rank", "Parameter-Efficient Transfer"], "split": "holdout"}
+{"id": "C14", "question": "RETA-LLM과 프롬프트 튜닝은 사용 목적이 어떻게 다른가요?", "papers": ["RETA-LLM", "Prompt Tuning"], "split": "holdout"}
+{"id": "C15", "question": "프롬프트 튜닝은 어댑터보다 파라미터를 얼마나 덜 쓰나요?", "papers": ["Prompt Tuning", "Parameter-Efficient Transfer"], "split": "holdout"}
+{"id": "C16", "question": "Adapter 논문과 LoRA 논문이 말하는 추론 지연은 어떻게 다른가요?", "papers": ["Parameter-Efficient Transfer", "LoRA: Low-Rank"], "split": "holdout"}
