@@ -95,6 +95,7 @@ async function summarize() {
           <p class="byline">{{ [paper.authors, paper.year].filter(Boolean).join(', ') }}</p>
           <div class="links">
             <RouterLink class="btn btn-primary" :to="{ name: 'ask', query: { paper: paper.id, title: paper.title } }">이 논문에 질문하기</RouterLink>
+            <RouterLink class="btn" :to="{ name: 'ask', query: { paper: paper.id, title: paper.title, mode: 'topic' } }">이 논문으로 주제 찾기</RouterLink>
             <a v-if="safeUrl(paper.url)" class="btn" :href="safeUrl(paper.url)" target="_blank" rel="noopener noreferrer">원문 열기</a>
           </div>
         </header>

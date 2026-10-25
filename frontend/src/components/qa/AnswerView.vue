@@ -50,6 +50,7 @@ const otherView = computed(() => (props.params.view === 'rnd' ? 'dev' : 'rnd'))
   <div v-else class="answer">
     <div ref="prose" class="prose" @click="onBodyClick" v-html="html" />
     <ReviewBadge v-if="result.needs_review" :text="result.answer" :sources="details" />
+    <slot name="after-body" />
     <SourceList :items="details" :fallback="result.sources ?? []" :active="active" />
     <div class="reask" role="group" aria-label="이 답변으로 할 수 있는 일">
       <template v-if="reaskable">

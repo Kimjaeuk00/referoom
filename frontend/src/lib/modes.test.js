@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   CHIP_MODES, collectedPaperIds, csvCell, EMPTY_CELL, MAX_COLLECT, MODE_ORDER, MODES, PERSPECTIVES, perspectiveOf, PRIOR_COLUMNS,
-  priorTableToCsv, priorTableToMarkdown, buildRequest, validateInput, VERDICTS, verdictOf,
+  priorTableToCsv, priorTableToMarkdown, buildRequest, validateInput, VERDICTS, verdictOf, manuscriptPreview, formatDelta,
 } from './modes.js'
 
 const has = (object, key) => Object.hasOwn(object, key)
@@ -141,4 +141,22 @@ test('collectedPaperIds: 색인했거나 이미 있어 건너뛴 논문만, id �
   assert.deepEqual(collectedPaperIds({ papers: [] }), [])
   assert.deepEqual(collectedPaperIds({}), [])
   assert.deepEqual(collectedPaperIds(null), [])
+})
+
+test('manuscriptPreview: 앞 80자와 글자 수만 남긴다', () => {
+  const long = '원고 문장입니다. '.repeat(30)
+  const preview = manuscriptPreview(long)
+  assert.ok(preview.startsWith(long.replace(/\s+/g, ' ').trim().slice(0, 80)))
+  assert.match(preview, /… \(원고 \d+자\)$/)
+  assert.ok(!preview.includes(long.trim()), '전체 원고는 들어 있지 않다')
+  assert.equal(manuscriptPreview(' 짧은   원고 '), '짧은 원고 (원고 5자)')
+  assert.equal(manuscriptPreview(null), ' (원고 0자)')
+})
+
+test('formatDelta: 부호와 비교 대상', () => {
+  assert.equal(formatDelta({ vs: 'LoRA', value: 0.9 }), '+0.9p (vs LoRA)')
+  assert.equal(formatDelta({ value: -1.2 }), '-1.2p')
+  assert.equal(formatDelta({ value: 0 }), '0p')
+  assert.equal(formatDelta(null), '')
+  assert.equal(formatDelta({ value: 'x' }), '')
 })

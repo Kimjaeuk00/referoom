@@ -19,6 +19,19 @@ export const MODES = {
 export const MODE_ORDER = ['tutor', 'prior', 'topic', 'verify']
 export const CHIP_MODES = ['prior', 'topic', 'verify'] // 입력창 아래 칩으로 보여 주는 모드. 모두 끄면 튜터다.
 
+/** 화면과 기록에 보여 줄 원고 요약: 앞 80자와 전체 글자 수. 원고 전체는 요청을 보낼 때만 쓴다. */
+export function manuscriptPreview(text) {
+  const flat = String(text ?? '').replace(/\s+/g, ' ').trim()
+  return `${flat.length > 80 ? `${flat.slice(0, 80)}…` : flat} (원고 ${flat.length.toLocaleString('ko-KR')}자)`
+}
+
+/** 본인 결과의 차이 값을 '+0.9p'처럼 */
+export function formatDelta(delta) {
+  const value = Number(delta?.value)
+  if (!Number.isFinite(value)) return ''
+  return `${value > 0 ? '+' : ''}${value}p${delta.vs ? ` (vs ${delta.vs})` : ''}`
+}
+
 export const isMode = (value) => MODE_ORDER.includes(value)
 
 const ids = (list) => (list ?? []).map(Number)
