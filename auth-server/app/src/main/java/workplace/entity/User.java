@@ -9,7 +9,6 @@ import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import workplace.enums.Role;
-import workplace.enums.ViewType;
 
 @Entity
 @Table(
@@ -63,14 +62,6 @@ public class User {
         columnDefinition = "ENUM('member','team_admin') DEFAULT 'member'"
     )
     private Role role = Role.member;
-
-    // 관점은 더 이상 쓰지 않는다. 컬럼(view_pref)을 삭제하기 전까지 매핑만 남긴다.
-    @Enumerated(EnumType.STRING)
-    @Column(
-        name = "view_pref",
-        columnDefinition = "ENUM('dev','rnd')"
-    )
-    private ViewType viewPref;
 
     @Column(
         name = "created_at",

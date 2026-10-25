@@ -8,7 +8,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import workplace.enums.TeamType;
 
 @Entity
 @Table(
@@ -33,14 +32,6 @@ public class Team {
 
     @Column(name = "name", nullable = false, length = 100)
     private String name;
-
-    @Enumerated(EnumType.STRING)
-    @Column(
-        name = "team_type",
-        nullable = false,
-        columnDefinition = "ENUM('dev','rnd')"
-    )
-    private TeamType teamType;
 
     @Column(name = "invite_code", nullable = false, length = 16)
     private String inviteCode;

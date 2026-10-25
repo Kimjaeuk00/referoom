@@ -8,7 +8,6 @@ import workplace.dto.res.TeamResDTO;
 import workplace.dto.res.UserResDTO;
 import workplace.entity.Team;
 import workplace.entity.User;
-import workplace.enums.TeamType;
 
 public final class TeamConverter {
 
@@ -21,8 +20,6 @@ public final class TeamConverter {
     ) {
         return Team.builder()
             .name(name)
-            // 팀 유형은 더 이상 쓰지 않는다. 컬럼(team_type)을 삭제하기 전까지 NOT NULL을 채우는 고정값이다.
-            .teamType(TeamType.dev)
             .inviteCode(inviteCode)
             .build();
     }
