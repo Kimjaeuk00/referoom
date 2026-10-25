@@ -1,3 +1,5 @@
+import json
+import logging
 import os
 import sys
 import time
@@ -77,6 +79,22 @@ def fake_llm(monkeypatch):
     generate.state = state
     generate.structured_calls = structured_calls
     return generate
+
+
+@pytest.fixture()
+def access_log():
+    """공통 요청 로그(JSON 한 줄)를 모은다. 이 로거는 전파되지 않아 caplog로는 못 받는다."""
+    records: list[dict] = []
+
+    class Collect(logging.Handler):
+        def emit(self, record):
+            records.append(json.loads(record.getMessage()))
+
+    logger = logging.getLogger("referoom_common.access")
+    handler = Collect()
+    logger.addHandler(handler)
+    yield records
+    logger.removeHandler(handler)
 
 
 @pytest.fixture()

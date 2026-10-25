@@ -78,6 +78,12 @@ PRIOR_CELL_MAX_CHARS = int(os.getenv("PRIOR_CELL_MAX_CHARS", "300"))  # 표 한 
 # 주제 제안
 TOPIC_MAX_PAPERS = int(os.getenv("TOPIC_MAX_PAPERS", "10"))  # 대상 논문 상한 (요청 검증과 같은 값)
 TOPIC_CHUNKS_PER_PAPER = int(os.getenv("TOPIC_CHUNKS_PER_PAPER", "3"))  # '한계·향후 연구' 질의로 논문당 모으는 청크 (미측정)
+TOPIC_LIMITS_PER_PAPER = int(os.getenv("TOPIC_LIMITS_PER_PAPER", "2"))  # 논문 한 편에서 뽑는 한계 수. 후보 4개가 서로 다른 한계를 쓰기에 충분한 양으로 잡은 값 (미측정)
+TOPIC_SIMILAR_SEARCH_K = int(os.getenv("TOPIC_SIMILAR_SEARCH_K", "20"))  # 유사 연구를 찾으려고 검색하는 청크 수. 선택한 논문의 청크를 빼고도 남도록 넉넉히 (미측정)
+TOPIC_WORKERS = int(os.getenv("TOPIC_WORKERS", "4"))  # 논문별 한계 추출을 동시에 부르는 스레드 수 (미측정)
+TOPIC_TEXT_MAX_CHARS = int(os.getenv("TOPIC_TEXT_MAX_CHARS", "300"))  # 한계 요약·후보 문장 하나의 글자 수 상한 (미측정)
+TOPIC_LIST_MAX_ITEMS = int(os.getenv("TOPIC_LIST_MAX_ITEMS", "5"))  # 후보의 데이터셋·비교 대상·지표 목록마다의 항목 수 상한
+TOPIC_SIMILAR_MAX = int(os.getenv("TOPIC_SIMILAR_MAX", "3"))  # 후보마다 보여 주는 유사 연구 수
 TOPIC_SIMILAR_MIN_SCORE = float(os.getenv("TOPIC_SIMILAR_MIN_SCORE", "0.60"))  # 이 값 이상일 때만 '라이브러리 안의 유사 연구'로 보인다. REVIEW_SCORE와 같은 값에서 시작, 후보 질문-논문 점수 분포는 미측정
 # 원고 검증
 VERIFY_MAX_CLAIMS = int(os.getenv("VERIFY_MAX_CLAIMS", "12"))  # 한 원고에서 대조할 주장 수. 넘으면 앞에서부터 처리하고 warnings로 알린다 (원고 3,000자 기준 미측정)

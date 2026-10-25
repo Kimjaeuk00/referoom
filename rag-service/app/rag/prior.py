@@ -11,13 +11,12 @@
 import logging
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
 
 from app.rag import config_rag, llm
-from app.rag.context import LABEL_RE, Block, build_blocks, details_of, render_context, source_strings, verify_citations
+from app.rag.context import Block, build_blocks, details_of, render_context, source_strings, verify_citations
 from app.rag.deps import CurrentUser, store
 from app.rag.errors import ApiError
+from app.rag.modes import adopt_block, clean_text, map_safe
 from app.rag.pipeline import SOURCE_MAP, _not_found
 from app.rag.prompts import (
     LEVEL_RULES, PRIOR_COLUMN_NAMES, PRIOR_COMPARE_PROMPT, PRIOR_COMPARE_USER, PRIOR_EVIDENCE_QUERIES, PRIOR_EXTRACT_PROMPT,
@@ -29,7 +28,6 @@ logger = logging.getLogger("rag")
 
 COLUMNS = tuple(PRIOR_COLUMN_NAMES)  # problem, method, dataset, metric, result, limitation
 _DIGIT_RE = re.compile(r"\d")
-_SPACE_RE = re.compile(r"\s+")
 
 
 def _paper_ids(req: RagRequest, team_id: int) -> list[int]:
@@ -74,28 +72,6 @@ def _extract(blocks: list[Block]) -> tuple[PriorRowDraft, int, int]:
     return llm.generate_structured(PRIOR_EXTRACT_PROMPT, user_msg, PriorRowDraft)
 
 
-def _extract_safe(blocks: list[Block]):
-    """한 논문이 실패해도 나머지는 계속한다. 반환: (draft 또는 None, 입력 토큰, 출력 토큰, 오류 또는 None)."""
-    try:
-        draft, i, o = _extract(blocks)
-        return draft, i, o, None
-    except ApiError as e:
-        return None, 0, 0, e
-    except Exception as e:  # 예상하지 못한 오류도 해당 논문만 건너뛴다. 내용은 남기지 않고 종류만 기록
-        logger.error("prior extract failed: %s", type(e).__name__)
-        return None, 0, 0, ApiError(500, "INTERNAL_ERROR", "답변을 생성하지 못했어요. 잠시 후 다시 시도해 주세요.")
-
-
-def _clean(value: str | None) -> str | None:
-    """표 칸 문자열 정리: 공백 정리, 값 안의 [S#] 표시 제거(근거는 labels로만 잇는다), 길이 상한."""
-    if not value:
-        return None
-    text = _SPACE_RE.sub(" ", LABEL_RE.sub("", value)).strip()
-    if not text:
-        return None
-    return text[: config_rag.PRIOR_CELL_MAX_CHARS]
-
-
 def _row(blocks: list[Block], draft: PriorRowDraft, used: list[Block]) -> dict:
     """논문 한 편의 표 행. 근거 라벨이 이 논문 블록에 없는 칸은 null로 버린다(근거 없는 값은 내보내지 않는다).
     쓰인 블록은 전역 라벨(S1..)을 새로 붙여 used에 더한다."""
@@ -105,11 +81,10 @@ def _row(blocks: list[Block], draft: PriorRowDraft, used: list[Block]) -> dict:
     mapping: dict[str, str] = {}
     for key in COLUMNS:
         cell = cells.get(key)
-        value = _clean(cell.value) if cell else None
+        value = clean_text(cell.value, config_rag.PRIOR_CELL_MAX_CHARS) if cell else None
         if value and cell.label in local:
             if cell.label not in mapping:
-                mapping[cell.label] = f"S{len(used) + 1}"
-                used.append(replace(local[cell.label], label=mapping[cell.label]))
+                mapping[cell.label] = adopt_block(used, local[cell.label])
             row[key] = value
             row["labels"][key] = mapping[cell.label]
         else:
@@ -140,14 +115,15 @@ def run(req: RagRequest, user: CurrentUser, usage: dict | None = None) -> RagRes
     papers = [(pid, build_blocks(hits)) for pid, hits in evidence.items() if hits]
 
     if papers:
-        with ThreadPoolExecutor(max_workers=max(1, config_rag.PRIOR_WORKERS)) as pool:
-            results = list(pool.map(lambda p: _extract_safe(p[1]), papers))
-        for (_, blocks), (draft, i, o, error) in zip(papers, results):
-            in_tok, out_tok = in_tok + i, out_tok + o
+        # 한 논문이 실패해도 나머지는 계속한다(map_safe)
+        results = map_safe(lambda p: _extract(p[1]), papers, config_rag.PRIOR_WORKERS)
+        for (_, blocks), (out, error) in zip(papers, results):
             if error is not None:
                 failures.append(error)
-            else:
-                rows.append(_row(blocks, draft, used))
+                continue
+            draft, i, o = out
+            in_tok, out_tok = in_tok + i, out_tok + o
+            rows.append(_row(blocks, draft, used))
         if not rows and failures:
             raise failures[0]  # 모든 논문이 실패했다면 '근거 없음'이 아니라 실패다
 

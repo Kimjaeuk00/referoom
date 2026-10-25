@@ -81,6 +81,33 @@ Perspective = Literal["limitation_fix", "combine", "extend", "efficiency", "eval
 Verdict = Literal["match", "mismatch", "condition_differs", "not_found", "own_result"]
 
 
+class LimitationItem(BaseModel):
+    """LLM 구조화 출력: 근거에서 찾은 한계 하나."""
+    summary: str = Field(description="논문이 밝힌 한계를 한 문장으로")
+    label: str = Field(description="그 한계가 나온 근거 블록의 라벨 하나. 예: S2")
+
+
+class LimitationDraft(BaseModel):
+    """LLM 구조화 출력: 논문 한 편에서 찾은 한계들. 근거에 한계가 없으면 비어 있다."""
+    items: list[LimitationItem] = Field(default_factory=list)
+
+
+class TopicDraftItem(BaseModel):
+    """LLM 구조화 출력: 주제 후보 하나."""
+    perspective: Perspective
+    title: str
+    question: str = Field(description="연구 질문 한 문장")
+    approach: str = Field(description="접근 아이디어 한두 문장")
+    datasets: list[str] = Field(default_factory=list)
+    baselines: list[str] = Field(default_factory=list)
+    metrics: list[str] = Field(default_factory=list)
+    based_on: list[str] = Field(default_factory=list, description="근거가 된 한계의 라벨들. 목록에 있는 라벨만")
+
+
+class TopicDraft(BaseModel):
+    topics: list[TopicDraftItem] = Field(default_factory=list)
+
+
 class TopicRequest(BaseModel):
     paper_ids: list[StrictInt] = Field(min_length=1, max_length=10)  # 대상 논문 1~10편 (MAX_COLLECT와 같다)
     hint: str = Field(default="", max_length=1000)  # 원하는 방향(비워도 된다)
