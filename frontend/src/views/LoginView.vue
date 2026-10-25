@@ -27,6 +27,7 @@ const PAINS = [
 const STEPS = [
   { title: '논문 모으기', text: 'PDF를 올리거나 Zotero 그룹을 연결하거나, 주제로 arXiv에서 찾아 팀 라이브러리에 모아요.' },
   { title: '질문하기', text: '관점(구현, 연구)을 고르고 물어보세요. 어려우면 "더 쉽게", 더 알고 싶으면 "더 깊게"를 눌러요.' },
+  { title: '논문 쓰기 돕기', text: '입력창 아래 선행연구·주제·검증 중 하나를 켜면 정리표, 연구 주제 후보, 원고 수치 대조를 받아요. 아무것도 켜지 않으면 일반 질문이에요.' },
   { title: '근거 확인', text: '답 속 출처 표시를 누르면 논문과 쪽수, 근거 문장이 보여요.' },
 ]
 const step = ref(0)
@@ -36,7 +37,8 @@ const FAQ = [
   { q: '라이브러리에 없는 내용을 물으면 어떻게 되나요?', a: '지어내서 답하지 않아요. 찾지 못했다고 알려 주고, 관련 논문을 추가하거나 팀원에게 물어보도록 안내해요.' },
   { q: '답이 틀릴 수도 있나요?', a: '수식이나 수치가 들어간 답에는 원문 확인 권장 표시가 붙어요. 출처의 쪽수로 원문을 꼭 대조해 보세요.' },
   { q: '팀원은 어떻게 초대하나요?', a: '팀을 만들면 초대 코드가 나와요. 팀원이 가입할 때 그 코드를 넣으면 같은 팀이 돼요.' },
-  { q: 'Zotero 연동은 누가 하나요?', a: '팀 관리자가 설정에서 그룹 ID와 API 키를 넣어요. 저장한 키는 다시 보여 주지 않아요.' },
+  { q: 'Zotero 연동은 어떻게 하나요?', a: '서버 설정에 Zotero 그룹이 연결돼 있어요. 설정 화면에서 연결 상태를 확인하고 지금 동기화할 수 있어요.' },
+  { q: '원고를 넣으면 어디로 가나요?', a: '검증 모드에서 원고는 외부 LLM으로 전송돼요. 처음 보낼 때 안내가 나오고, 로그와 색인에는 저장하지 않아요.' },
 ]
 
 // 로그인 후 원래 화면으로 돌아간다. 외부 주소로는 보내지 않는다.
@@ -86,10 +88,10 @@ async function submit() {
         <div class="hero-text">
           <h1 id="landing-title" class="hero-title">
             안녕하세요!<br />
-            <span class="grad-word">팀 논문을 쉽게 풀어 주는</span><br />
+            <span class="grad-word">연구 논문 쓰기를 돕는</span><br />
             Referoom이에요
           </h1>
-          <p class="hero-sub">팀이 모은 논문에서 근거를 찾아, 어려우면 쉽게 더 알고 싶으면 깊게 설명해 드려요.</p>
+          <p class="hero-sub">팀이 모은 논문에서 근거를 찾아 답하고, 선행연구 정리와 연구 주제 제안, 원고 수치 검증까지 출처와 함께 도와 드려요.</p>
           <div class="hero-actions">
             <RouterLink to="/signup" class="btn btn-primary">무료로 시작하기</RouterLink>
             <a href="#steps" class="btn btn-quiet more">더 알아보기</a>
@@ -189,7 +191,7 @@ async function submit() {
 
       <footer class="foot">
         <BrandLogo :size="24" />
-        <span>팀 논문 공동 관리와 근거 기반 이해를 돕는 서비스</span>
+        <span>팀 논문 관리와 연구 논문 작성을 근거 기반으로 돕는 서비스</span>
       </footer>
     </div>
   </div>
