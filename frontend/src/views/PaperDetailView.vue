@@ -9,6 +9,7 @@ import { formatDate, PAPER_STATUS, safeUrl, SOURCE_TYPE, toneOfTag } from '@/lib
 import ViewSelector from '@/components/common/ViewSelector.vue'
 import StatusBanner from '@/components/common/StatusBanner.vue'
 import ReviewBadge from '@/components/qa/ReviewBadge.vue'
+import { usePdfOpener } from '@/composables/usePdfOpener'
 
 const route = useRoute()
 const profile = useProfileStore()
@@ -22,6 +23,7 @@ const summarizing = ref(false)
 const summaryError = ref(null)
 
 const page = computed(() => Number(route.query.page) || null)
+const pdf = usePdfOpener()
 
 // Semantic Reader처럼 요약 섹션을 문제·방법·결과 세 갈래로 칠해 훑어보기 쉽게 한다.
 // 섹션 key는 DEV_04 예시 기준이고, 모르는 key는 색 없이 둔다.
@@ -96,13 +98,17 @@ async function summarize() {
           <div class="links">
             <RouterLink class="btn btn-primary" :to="{ name: 'ask', query: { paper: paper.id, title: paper.title } }">이 논문에 질문하기</RouterLink>
             <RouterLink class="btn" :to="{ name: 'ask', query: { paper: paper.id, title: paper.title, mode: 'topic' } }">이 논문으로 주제 찾기</RouterLink>
+            <button v-if="paper.status === 'indexed'" type="button" class="btn" :disabled="pdf.opening.value.has('paper')" @click="pdf.open('paper', paper.id, page)">
+              {{ pdf.opening.value.has('paper') ? '여는 중…' : page ? `원문 PDF ${page}쪽 열기` : '원문 PDF 열기' }}
+            </button>
             <a v-if="safeUrl(paper.url)" class="btn" :href="safeUrl(paper.url)" target="_blank" rel="noopener noreferrer">원문 열기</a>
           </div>
         </header>
 
         <p v-if="page" class="page-note">
           답변의 근거는 이 논문의 <strong>{{ page }}쪽</strong>이에요.
-          <template v-if="safeUrl(paper.url)">원문을 열어 해당 쪽을 확인하세요.</template>
+          <template v-if="paper.status === 'indexed'">위의 '원문 PDF {{ page }}쪽 열기'로 해당 쪽을 바로 볼 수 있어요.</template>
+          <template v-else-if="safeUrl(paper.url)">원문을 열어 해당 쪽을 확인하세요.</template>
           <template v-else>원문 PDF에서 해당 쪽을 확인하세요.</template>
         </p>
 

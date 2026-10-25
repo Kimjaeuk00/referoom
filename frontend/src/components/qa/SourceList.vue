@@ -3,6 +3,7 @@ import { nextTick, ref, useId, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { safeUrl, toneOfLabel } from '@/lib/format'
 import Icon from '@/components/common/Icon.vue'
+import { usePdfOpener } from '@/composables/usePdfOpener'
 
 // 답변 아래 회청색 근거 상자. 본문의 출처 알약을 누르면 같은 색 줄로 옮겨 가 강조한다.
 const props = defineProps({
@@ -13,6 +14,7 @@ const props = defineProps({
 
 const uid = useId()
 const current = ref(null)
+const pdf = usePdfOpener()
 
 watch(
   () => props.active,
@@ -42,6 +44,15 @@ watch(
               <a v-else-if="safeUrl(s.url)" :href="safeUrl(s.url)" target="_blank" rel="noopener noreferrer">{{ s.title }}</a>
               <span v-else>{{ s.title }}</span>
               <span v-if="s.page" class="page tabular">{{ s.page }}쪽</span>
+              <!-- 팀이 보관한 원본 PDF를 새 탭에서 그 쪽으로 연다. paper_id가 없는 근거(웹 주소만 있는 것)에는 두지 않는다 -->
+              <button
+                v-if="s.paper_id"
+                type="button"
+                class="open-pdf"
+                :disabled="pdf.opening.value.has(s.label)"
+                :aria-label="`근거 ${s.label} 원문${s.page ? ` ${s.page}쪽` : ''} 보기`"
+                @click="pdf.open(s.label, s.paper_id, s.page)"
+              >{{ pdf.opening.value.has(s.label) ? '여는 중…' : s.page ? `원문 ${s.page}쪽 보기` : '원문 보기' }}</button>
             </p>
             <p v-if="s.snippet" class="quote">{{ s.snippet }}</p>
           </div>
@@ -133,6 +144,26 @@ li.on::after {
 .page {
   color: var(--c-ink-muted);
   font-size: var(--fs-xs);
+}
+
+.open-pdf {
+  padding: 2px 10px;
+  border: 1px solid var(--c-rule-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-ink);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.open-pdf:hover:not(:disabled) {
+  background: var(--c-surface);
+}
+
+.open-pdf:disabled {
+  opacity: 0.55;
+  cursor: progress;
 }
 
 .quote {
