@@ -10,6 +10,7 @@ import time
 
 from app.rag import config_rag, llm, page_images
 from app.rag.context import LABEL_RE, Block, build_blocks, details_of, render_context, source_strings, split_label_groups, verify_citations
+from app.rag import paper_names
 from app.rag.deps import CurrentUser, store
 from app.rag.prompts import IMAGE_NOTE, LEVEL_RULES, SYSTEM_PROMPT, USER_PROMPT, ANSWER_STYLE
 from app.rag.schemas import RagRequest, RagResponse
@@ -33,6 +34,24 @@ _MATH_RE = re.compile(r"\$|%|\d+\.\d+")
 _QUANTITY_RE = re.compile(r"\d[\d,]*\s*(?:GB|MB|TB|KB|bit|비트|배(?!치)|B\b|M\b|K\b|×)|\d{1,3}(?:,\d{3})+")
 # 이미지 재시도 조건: 답변에 백분율·소수·수식 기호·두 자리 이상 숫자가 있음
 _VALUE_RE = re.compile(r"\d+(\.\d+)?\s*%|\d+\.\d+|\$|\d{2,}")
+
+
+def _with_named_papers(req: RagRequest, team_id: int, hits: list) -> list:
+    """범위가 전체이고 질문이 라이브러리 논문 2편 이상의 이름을 들면, 그 논문마다 따로 검색해 합친다(비교 질문의 근거 쏠림 방지).
+    이름이 든 논문의 문단은 MIN_SCORE보다 낮은 NAMED_PAPER_MIN_SCORE부터 쓴다. 그 밖의 질문은 기존 결과를 그대로 돌려준다."""
+    titles_of = getattr(store, "paper_titles", None)
+    if req.scope.type != "all" or titles_of is None:
+        return hits
+    titles = titles_of(team_id)
+    named = paper_names.detect(req.question, paper_names.aliases_of(titles)) if titles else []
+    if len(named) < 2:
+        return hits
+    per_paper = [
+        [h for h in store.search(team_id, ALL_SOURCES, req.question, k=config_rag.NAMED_PAPER_PER_K, paper_ids=[pid])
+         if h.score >= config_rag.NAMED_PAPER_MIN_SCORE]
+        for pid in named
+    ]
+    return paper_names.merge(hits, per_paper, req.top_k)
 
 
 def _not_found(level: str) -> RagResponse:
@@ -104,7 +123,8 @@ def run(req: RagRequest, user: CurrentUser, usage: dict | None = None) -> RagRes
         paper_ids=req.scope.ids if req.scope.type == "paper" else None,
         tags=req.scope.tags if req.scope.type == "tag" else None,
     )
-    hits = limit_captions([h for h in hits if h.score >= config_rag.MIN_SCORE], req.top_k, config_rag.MAX_CAPTION_HITS)
+    hits = [h for h in hits if h.score >= config_rag.MIN_SCORE]
+    hits = limit_captions(_with_named_papers(req, user.team_id, hits), req.top_k, config_rag.MAX_CAPTION_HITS)
 
     in_tok = out_tok = 0
     images: list = []
