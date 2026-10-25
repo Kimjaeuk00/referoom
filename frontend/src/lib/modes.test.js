@@ -18,33 +18,40 @@ test('MODES: 이름·입력 한도·경로', () => {
   assert.equal(MAX_COLLECT, 10)
 })
 
+test('buildRequest: 관점(view)과 자료(source)는 어떤 모드에서도 body에 들어가지 않는다', () => {
+  for (const mode of ['tutor', 'prior', 'topic', 'verify']) {
+    const { body } = buildRequest(mode, { question: '질문입니다', paperIds: [1], view: 'rnd', source: 'web' })
+    assert.ok(!('view' in body) && !('source' in body), mode)
+  }
+})
+
 test('buildRequest: level은 값을 줄 때(더 쉽게/더 깊게)만 body에 들어간다', () => {
   for (const mode of ['tutor', 'prior']) {
-    const plain = buildRequest(mode, { question: ' LoRA란? ', view: 'rnd' })
+    const plain = buildRequest(mode, { question: ' LoRA란? ' })
     assert.equal(plain.path, '/rag-query')
     assert.equal(has(plain.body, 'level'), false, `${mode}: level이 없어야 한다`)
-    assert.deepEqual(plain.body, { question: 'LoRA란?', mode, source: 'all', scope: undefined, view: 'rnd', top_k: 5 })
-    assert.equal(buildRequest(mode, { question: '질문', view: 'dev', level: 'L1' }).body.level, 'L1')
+    assert.deepEqual(plain.body, { question: 'LoRA란?', mode, scope: undefined, top_k: 5 })
+    assert.equal(buildRequest(mode, { question: '질문', level: 'L1' }).body.level, 'L1')
   }
-  for (const mode of ['topic', 'verify']) assert.equal(has(buildRequest(mode, { question: '원고 '.repeat(5), paperIds: [1], view: 'dev', level: 'L3' }).body, 'level'), false)
+  for (const mode of ['topic', 'verify']) assert.equal(has(buildRequest(mode, { question: '원고 '.repeat(5), paperIds: [1], level: 'L3' }).body, 'level'), false)
 })
 
 test('buildRequest: 선행연구는 수집한 논문이 있으면 그것으로 범위를 정한다', () => {
   const scope = { type: 'tag', tags: ['peft'] }
-  assert.deepEqual(buildRequest('prior', { question: '비교', view: 'rnd', scope }).body.scope, scope)
-  const body = buildRequest('prior', { question: '비교', view: 'rnd', scope, priorIds: ['41', 42] }).body
+  assert.deepEqual(buildRequest('prior', { question: '비교', scope }).body.scope, scope)
+  const body = buildRequest('prior', { question: '비교', scope, priorIds: ['41', 42] }).body
   assert.deepEqual(body.scope, { type: 'paper', ids: [41, 42] })
   assert.equal(body.mode, 'prior')
-  assert.equal(buildRequest('tutor', { question: '질문', view: 'dev', scope, priorIds: [1] }).body.scope, scope) // 튜터는 priorIds를 쓰지 않는다
+  assert.equal(buildRequest('tutor', { question: '질문', scope, priorIds: [1] }).body.scope, scope) // 튜터는 priorIds를 쓰지 않는다
 })
 
 test('buildRequest: 주제·검증 요청 형식', () => {
-  const topic = buildRequest('topic', { question: '  메모리 효율  ', paperIds: ['41', 42], view: 'rnd' })
-  assert.deepEqual(topic, { path: '/topic-suggest', timeoutKey: 'long', body: { paper_ids: [41, 42], hint: '메모리 효율', n: 4, view: 'rnd' } })
-  assert.equal(buildRequest('topic', { question: '', paperIds: [1], view: 'dev' }).body.hint, '')
-  const verify = buildRequest('verify', { question: '우리 방법은 GLUE 평균 88.1이다', view: 'rnd' })
-  assert.deepEqual(verify, { path: '/verify', timeoutKey: 'long', body: { text: '우리 방법은 GLUE 평균 88.1이다', paper_ids: null, view: 'rnd' } })
-  assert.deepEqual(buildRequest('verify', { question: '원고 '.repeat(5), paperIds: [3, '4'], view: 'dev' }).body.paper_ids, [3, 4])
+  const topic = buildRequest('topic', { question: '  메모리 효율  ', paperIds: ['41', 42] })
+  assert.deepEqual(topic, { path: '/topic-suggest', timeoutKey: 'long', body: { paper_ids: [41, 42], hint: '메모리 효율', n: 4 } })
+  assert.equal(buildRequest('topic', { question: '', paperIds: [1] }).body.hint, '')
+  const verify = buildRequest('verify', { question: '우리 방법은 GLUE 평균 88.1이다' })
+  assert.deepEqual(verify, { path: '/verify', timeoutKey: 'long', body: { text: '우리 방법은 GLUE 평균 88.1이다', paper_ids: null } })
+  assert.deepEqual(buildRequest('verify', { question: '원고 '.repeat(5), paperIds: [3, '4'] }).body.paper_ids, [3, 4])
   assert.throws(() => buildRequest('nope', {}), /알 수 없는 모드/)
 })
 

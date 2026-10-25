@@ -7,11 +7,10 @@ import { useAuthStore } from './auth'
 export const useProfileStore = defineStore('profile', () => {
   const auth = useAuthStore()
 
-  const view = computed(() => auth.user?.view ?? auth.claims?.view ?? 'dev')
   const displayName = computed(() => auth.user?.displayName || auth.claims?.username || '')
   const team = computed(() => auth.user?.team ?? null)
 
-  // 관점을 바꾸면 응답의 새 토큰으로 바꿔야 AI 서비스에 반영된다(DEV_01 4.1). 사용자 수준(level)은 v0.2에서 없어졌다.
+  // 지금은 바꿀 프로필 항목이 없다(수준·관점 제거). 서버는 본문을 읽지 않고 새 토큰만 발급한다.
   async function updateProfile(changes) {
     const data = await api.auth('/api/me/profile', { method: 'PATCH', json: changes })
     auth.applySession(data)
@@ -24,5 +23,5 @@ export const useProfileStore = defineStore('profile', () => {
     return data
   }
 
-  return { view, displayName, team, updateProfile, joinTeam }
+  return { displayName, team, updateProfile, joinTeam }
 })

@@ -24,9 +24,7 @@ function loadMode() {
 
 export const useQaStore = defineStore('qa', () => {
   const turns = ref([])
-  const source = ref('all') // pdf | web | all
   const scope = ref({ type: 'all' }) // { type: 'all' } | { type: 'tag', tags } | { type: 'paper', ids }
-  const view = ref(null) // null이면 프로필 값을 쓴다
   const mode = ref(loadMode()) // tutor | prior | topic | verify
   const priorScope = ref([]) // 선행연구에서 수집한 논문 id. 새로고침하면 사라진다
   const libraryOnly = ref(false) // 선행연구에서 논문을 새로 찾지 않고 라이브러리 안에서만 찾기
@@ -53,9 +51,9 @@ export const useQaStore = defineStore('qa', () => {
   const needsCollect = computed(() => mode.value === 'prior' && !libraryOnly.value && priorScope.value.length === 0)
 
   function request(turn) {
-    const { mode: m = 'tutor', source, scope: s, view: v, level, paperIds, priorIds } = turn.params
+    const { mode: m = 'tutor', scope: s, level, paperIds, priorIds } = turn.params
     // 검증은 원고 전체(turn.manuscript)를 보내고 화면에는 요약(turn.question)만 둔다
-    return buildRequest(m, { question: turn.manuscript ?? turn.question, source, scope: scopeBody(s), view: v, level, paperIds, priorIds })
+    return buildRequest(m, { question: turn.manuscript ?? turn.question, scope: scopeBody(s), level, paperIds, priorIds })
   }
 
   async function run(turn) {
@@ -91,5 +89,5 @@ export const useQaStore = defineStore('qa', () => {
     if (!busy.value) run(turn)
   }
 
-  return { turns, source, scope, view, mode, priorScope, libraryOnly, priorPending, needsCollect, pickedIds, voiceTurns, busy, setMode, ask, retry }
+  return { turns, scope, mode, priorScope, libraryOnly, priorPending, needsCollect, pickedIds, voiceTurns, busy, setMode, ask, retry }
 })
