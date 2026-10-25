@@ -7,7 +7,6 @@ from typing import Literal
 from pydantic import BaseModel, Field, StrictInt, field_validator, model_serializer
 
 Level = Literal["L1", "L2", "L3"]
-View = Literal["dev", "rnd"]
 Mode = Literal["tutor", "prior"]  # /rag-query의 모드. 주제·검증은 전용 경로(/topic-suggest, /verify)를 쓴다
 
 
@@ -20,10 +19,8 @@ class Scope(BaseModel):
 class RagRequest(BaseModel):
     # team_id 등 정의되지 않은 필드는 무시한다 (team_id는 JWT에서만 읽음)
     question: str = Field(min_length=2, max_length=1000)
-    source: Literal["pdf", "web", "all"] = "all"
     scope: Scope = Field(default_factory=Scope)
     level: Level | None = None  # 이번 질문의 설명 깊이. '더 쉽게'=L1, '더 깊게'=L3, 생략하면 기본 깊이(L2 규칙)
-    view: View | None = None
     top_k: int = Field(default=5, ge=1, le=10)
     mode: Mode = "tutor"  # prior면 논문별 정리표(table)를 더해 답한다. 생략하면 지금까지와 같은 튜터
 
@@ -63,7 +60,6 @@ class RagResponse(BaseModel):
     needs_review: bool = False
     handoff: bool = False
     level: Level
-    view: View
     latency_ms: int
     table: list[dict] | None = None  # mode=prior일 때만. 논문별 행 {paper_id, title, problem, method, dataset, metric, result, limitation, labels}
 
@@ -112,7 +108,6 @@ class TopicRequest(BaseModel):
     paper_ids: list[StrictInt] = Field(min_length=1, max_length=10)  # 대상 논문 1~10편 (MAX_COLLECT와 같다)
     hint: str = Field(default="", max_length=1000)  # 원하는 방향(비워도 된다)
     n: int = Field(default=4, ge=1, le=4)
-    view: View | None = None
 
 
 class Limitation(BaseModel):
@@ -153,7 +148,6 @@ class TopicResponse(BaseModel):
     source_details: list[SourceDetail] = Field(default_factory=list)
     needs_review: bool = True  # 후보는 항상 사람이 검토한다
     handoff: bool = False
-    view: View
     latency_ms: int
 
 
@@ -186,7 +180,6 @@ class EvidenceRead(BaseModel):
 class VerifyRequest(BaseModel):
     text: str = Field(max_length=3000)  # 원고. 로그·예외·색인에 남기지 않는다
     paper_ids: list[StrictInt] | None = Field(default=None, max_length=50)  # 없으면 팀 전체
-    view: View | None = None
 
     @field_validator("text")
     @classmethod
@@ -223,7 +216,6 @@ class VerifyResponse(BaseModel):
     source_details: list[SourceDetail] = Field(default_factory=list)
     needs_review: bool = True  # 수치를 다루므로 항상 검토한다
     handoff: bool = False
-    view: View
     latency_ms: int
 
 
@@ -244,7 +236,6 @@ class SummaryDraft(BaseModel):
 
 class SummaryRequest(BaseModel):
     paper_id: StrictInt
-    view: View | None = None
 
 
 class SummarySection(BaseModel):
@@ -257,7 +248,6 @@ class SummarySection(BaseModel):
 class SummaryResponse(BaseModel):
     paper_id: int
     title: str
-    view: View
     sections: list[SummarySection] = Field(default_factory=list)
     needs_review: bool = True
     latency_ms: int

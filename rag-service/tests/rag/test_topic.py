@@ -9,7 +9,7 @@ from app.rag.errors import ApiError
 from app.rag.schemas import LimitationDraft, LimitationItem, TopicDraft, TopicDraftItem, TopicRequest
 from app.rag.store_stub import Hit
 
-USER = CurrentUser(user_id=12, username="tester", role="member", team_id=3, team_type="dev", view="dev")
+USER = CurrentUser(user_id=12, username="tester", role="member", team_id=3)
 TITLES = {41: "LoRA: Low-Rank Adaptation", 42: "QLoRA: Efficient Finetuning", 43: "VeRA: Vector-based Adaptation", 77: "DoRA: Weight-Decomposed"}
 
 
@@ -69,7 +69,7 @@ def test_normal_flow_matches_the_frontend_shape(fake_llm, lib):
     prepare(fake_llm)
     usage = {}
     r = topic.run(req(), USER, usage)
-    assert r.handoff is False and r.needs_review is True and r.view == "dev"
+    assert r.handoff is False and r.needs_review is True
     # 한계: 논문마다 2개, 전역 라벨 S1..S4, 쪽·논문 정보는 근거 블록의 것
     assert [(lim.label, lim.paper_id, lim.page) for lim in r.limitations] == [("S1", 41, 1), ("S2", 41, 2), ("S3", 42, 1), ("S4", 42, 2)]
     assert [d.label for d in r.source_details] == ["S1", "S2", "S3", "S4"] and len(r.sources) == 4
@@ -152,7 +152,7 @@ def test_only_the_users_team_is_used(fake_llm, lib, monkeypatch):
     monkeypatch.setattr(topic.store, "paper_chunk_counts", lambda team_id: teams.append(("counts", team_id)) or {41: 3})
     monkeypatch.setattr(topic.store, "chunks_of_paper", lambda team_id, pid, q, k=4: teams.append(("chunks", team_id)) or [chunk(41, 1)])
     prepare(fake_llm)
-    topic.run(req(paper_ids=[41]), CurrentUser(user_id=1, username="u", role="member", team_id=4, team_type="dev", view="dev"))
+    topic.run(req(paper_ids=[41]), CurrentUser(user_id=1, username="u", role="member", team_id=4))
     assert {team for _, team in teams} == {4} and ("counts", 4) in teams
 
 
@@ -190,12 +190,12 @@ def test_suggest_failure_is_an_error_not_handoff(fake_llm, lib):
 
 # ---- 프롬프트 ----
 
-def test_hint_n_and_view_reach_the_suggest_prompt(fake_llm, lib):
+def test_hint_n_and_answer_style_reach_the_suggest_prompt(fake_llm, lib):
     prepare(fake_llm)
-    call(hint="메모리 효율", n=2, view="rnd")
+    call(hint="메모리 효율", n=2)
     system, user, _ = [c for c in fake_llm.structured_calls if c[2] is TopicDraft][0]
-    from app.rag.prompts import VIEW_RULES
-    assert "최대 2개" in system and VIEW_RULES["rnd"] in system
+    from app.rag.prompts import ANSWER_STYLE
+    assert "최대 2개" in system and ANSWER_STYLE in system
     assert "메모리 효율" in user and "[S1]" in user and "《LoRA: Low-Rank Adaptation》 p.1" in user
     call()
     assert "[방향]\n없음" in [c for c in fake_llm.structured_calls if c[2] is TopicDraft][-1][1]
@@ -245,7 +245,7 @@ def test_api_response_keys_and_token_log(client, auth, fake_llm, lib, access_log
     prepare(fake_llm)
     r = client.post("/topic-suggest", json=BODY, headers={**auth, "X-Request-Id": "req-topic-1"})
     assert r.status_code == 200
-    assert set(r.json()) == {"limitations", "topics", "sources", "source_details", "needs_review", "handoff", "view", "latency_ms"}
+    assert set(r.json()) == {"limitations", "topics", "sources", "source_details", "needs_review", "handoff", "latency_ms"}
     assert set(r.json()["topics"][0]) == {"perspective", "title", "question", "approach", "experiment", "based_on", "similar_papers", "ai_generated"}
     (rec,) = [x for x in access_log if x["request_id"] == "req-topic-1"]
     assert (rec["path"], rec["status"], rec["team_id"], rec["in_tok"], rec["out_tok"]) == ("/topic-suggest", 200, 3, 300, 60)

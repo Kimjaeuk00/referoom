@@ -5,7 +5,7 @@ from conftest import make_token
 
 BODY = {"question": "LoRA는 어떤 파라미터를 학습하나요?"}
 RESPONSE_KEYS = {
-    "answer", "sources", "source_details", "needs_review", "handoff", "level", "view", "latency_ms",
+    "answer", "sources", "source_details", "needs_review", "handoff", "level", "latency_ms",
 }
 
 
@@ -37,12 +37,12 @@ def test_ok_matches_schema(client, auth):
     assert data["handoff"] is False
 
 
-def test_level_default_is_standard_depth_and_view_from_jwt(client, auth):
-    # v0.2: JWT에는 level이 없다. 요청이 level을 보내지 않으면 기본 깊이(L2)이고 view는 JWT 값을 따른다.
+def test_level_default_is_standard_depth(client, auth):
+    # JWT에는 level·view가 없다. 요청이 level을 보내지 않으면 기본 깊이(L2)이고, 보낸 view·source는 무시한다.
     d = client.post("/rag-query", json=BODY, headers=auth).json()
-    assert (d["level"], d["view"]) == ("L2", "rnd")
-    d = client.post("/rag-query", json={**BODY, "level": "L3", "view": "dev"}, headers=auth).json()
-    assert (d["level"], d["view"]) == ("L3", "dev")
+    assert d["level"] == "L2" and "view" not in d
+    d = client.post("/rag-query", json={**BODY, "level": "L3", "view": "dev", "source": "web"}, headers=auth).json()
+    assert d["level"] == "L3" and "view" not in d
 
 
 def test_body_team_id_is_ignored(client, auth, monkeypatch):

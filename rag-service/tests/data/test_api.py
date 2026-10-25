@@ -24,10 +24,8 @@ PAPER_FIELDS = {"id", "title", "authors", "year", "source_type", "tags", "status
 def token(**overrides) -> dict:
     now = int(time.time())
     claims = {"iss": "simple-auth-server", "sub": "12", "username": "tester", "role": "member", "team_id": TEAM,
-              "team_type": "dev", "view": "rnd", "iat": now, "exp": now + 3600, **overrides}
-    if claims["team_id"] is None and "team_type" not in overrides:
-        claims["team_type"] = None  # 팀 미가입은 team_id·team_type이 둘 다 null
-    keep = lambda k, v: v is not None or k in ("team_id", "team_type")  # noqa: E731
+              "iat": now, "exp": now + 3600, **overrides}
+    keep = lambda k, v: v is not None or k == "team_id"  # noqa: E731
     jwt_token = jwt.encode({k: v for k, v in claims.items() if keep(k, v)}, "test-secret-0123456789-abcdefghijklmnop", algorithm="HS256")
     return {"Authorization": f"Bearer {jwt_token}"}
 

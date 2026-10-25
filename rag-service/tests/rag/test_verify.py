@@ -10,7 +10,7 @@ from app.rag.errors import ApiError
 from app.rag.schemas import AnswerDraft, ClaimExtraction, EvidenceRead, ExtractedClaim, VerifyRequest
 from app.rag.store_stub import Hit
 
-USER = CurrentUser(user_id=12, username="tester", role="member", team_id=3, team_type="dev", view="dev")
+USER = CurrentUser(user_id=12, username="tester", role="member", team_id=3)
 TITLES = {41: "LoRA: Low-Rank Adaptation", 42: "QLoRA: Efficient Finetuning"}
 SECRET = "비공개-원고-표식-8d3k"
 MANUSCRIPT = f"본 연구의 방법은 GLUE 평균 88.1을 달성했다. LoRA는 학습 파라미터가 0.3M이다. {SECRET}"
@@ -96,7 +96,7 @@ def test_five_verdicts_and_global_labels(fake_llm, lib):
     assert [d.label for d in r.source_details] == ["S1", "S2", "S3"] and len(r.sources) == 3
     assert [(d.paper_id, d.page) for d in r.source_details] == [(41, 4), (42, 2), (41, 7)]
     # 응답 공통 규칙
-    assert r.needs_review is True and r.handoff is False and r.view == "dev"
+    assert r.needs_review is True and r.handoff is False
     assert r.draft == "초안 문장 [S1]."
     # 추출 1 + 근거 읽기 4(DoRA는 검색 결과가 없어 부르지 않는다) + 초안 1
     assert len(fake_llm.structured_calls) == 6 and (usage["in_tok"], usage["out_tok"]) == (600, 120)
@@ -215,7 +215,7 @@ def test_empty_team_index_skips_the_llm(fake_llm, lib, monkeypatch):
 
 def test_search_is_limited_to_known_papers_and_the_users_team(fake_llm, lib):
     prepare(fake_llm, FIVE[:1], READS)
-    verify.run(req(paper_ids=[41, 999, 41]), CurrentUser(user_id=1, username="u", role="member", team_id=4, team_type="dev", view="dev"))
+    verify.run(req(paper_ids=[41, 999, 41]), CurrentUser(user_id=1, username="u", role="member", team_id=4))
     assert lib[0]["paper_ids"] == [41] and lib[0]["team_id"] == 4 and lib[0]["sources"] == ["pdf"]
     assert lib[0]["min_score"] == config_rag.MIN_SCORE and lib[0]["k"] == config_rag.VERIFY_EVIDENCE_CHUNKS
     lib.clear()
@@ -289,7 +289,7 @@ def test_api_response_keys_and_logs(client, auth, fake_llm, lib, access_log):
     r = client.post("/verify", json={"text": MANUSCRIPT, "paper_ids": [41, 42]}, headers={**auth, "X-Request-Id": "req-verify-1"})
     assert r.status_code == 200
     data = r.json()
-    assert set(data) == {"claims", "draft", "warnings", "sources", "source_details", "needs_review", "handoff", "view", "latency_ms"}
+    assert set(data) == {"claims", "draft", "warnings", "sources", "source_details", "needs_review", "handoff", "latency_ms"}
     assert set(data["claims"][0]) == {"sentence", "subject", "metric", "claimed_value", "dataset", "found_value", "condition", "verdict", "labels", "delta"}
     assert data["claims"][4]["delta"] == {"vs": "LoRA", "value": 0.9}
     (rec,) = [x for x in access_log if x["request_id"] == "req-verify-1"]
@@ -308,7 +308,7 @@ def test_api_requires_login_and_team(client, fake_llm, lib):
 
 @pytest.mark.parametrize("body", [
     {"text": "가" * 9}, {"text": " " * 30}, {"text": SECRET + "가" * 3001}, {"text": f"{SECRET} 원고", "paper_ids": [1.5]},
-    {"text": f"{SECRET} 원고", "paper_ids": list(range(51))}, {"text": f"{SECRET} 원고", "view": "all"}, {},
+    {"text": f"{SECRET} 원고", "paper_ids": list(range(51))}, {},
 ])
 def test_api_validation_errors_do_not_echo_the_manuscript(client, auth, fake_llm, body):
     r = client.post("/verify", json=body, headers=auth)

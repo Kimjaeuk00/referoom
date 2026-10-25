@@ -15,22 +15,18 @@ import jwt  # PyJWT (common-py와 같은 라이브러리)
 
 
 def make_token(**overrides) -> str:
-    """인증서버가 발급하는 claim 집합(v0.2: level 없음). 값이 None인 claim은 빼되, 팀 미가입은 team_id·team_type이 둘 다 null로 들어간다."""
+    """인증서버가 발급하는 claim 집합(level·view·team_type 없음). 값이 None인 claim은 빼되, 팀 미가입은 team_id가 null로 들어간다."""
     claims = {
         "iss": "simple-auth-server",
         "sub": "12",
         "username": "tester",
         "role": "member",
         "team_id": 3,
-        "team_type": "dev",
-        "view": "rnd",
         "iat": int(time.time()),
         "exp": int(time.time()) + 3600,
     }
     claims.update(overrides)
-    if claims["team_id"] is None and "team_type" not in overrides:
-        claims["team_type"] = None
-    return jwt.encode({k: v for k, v in claims.items() if v is not None or k in ("team_id", "team_type")}, "test-secret-0123456789-abcdefghijklmnop", algorithm="HS256")
+    return jwt.encode({k: v for k, v in claims.items() if v is not None or k == "team_id"}, "test-secret-0123456789-abcdefghijklmnop", algorithm="HS256")
 
 
 @pytest.fixture(autouse=True)

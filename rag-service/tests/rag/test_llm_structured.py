@@ -152,11 +152,11 @@ def test_rag_request_mode_default_and_values():
 
 
 def test_topic_request_rules():
-    assert TopicRequest(paper_ids=[41]).model_dump() == {"paper_ids": [41], "hint": "", "n": 4, "view": None}
+    assert TopicRequest(paper_ids=[41]).model_dump() == {"paper_ids": [41], "hint": "", "n": 4}
     assert len(TopicRequest(paper_ids=list(range(1, 11))).paper_ids) == 10
     for bad in ({"paper_ids": []}, {"paper_ids": list(range(1, 12))}, {"paper_ids": ["41"]}, {"paper_ids": [True]},
                 {"paper_ids": [1.5]}, {"paper_ids": [1], "n": 5}, {"paper_ids": [1], "n": 0},
-                {"paper_ids": [1], "hint": "가" * 1001}, {"paper_ids": [1], "view": "all"}):
+                {"paper_ids": [1], "hint": "가" * 1001}):
         with pytest.raises(ValidationError):
             TopicRequest(**bad)
 
@@ -165,13 +165,13 @@ def test_verify_request_rules():
     assert VerifyRequest(text="  " + "가" * 10 + "  ").text == "가" * 10  # 앞뒤 공백은 세지 않는다
     assert VerifyRequest(text="가" * 3000).paper_ids is None
     for bad in ({"text": "가" * 9}, {"text": " " * 20}, {"text": "가" * 3001}, {"text": "가" * 10, "paper_ids": [1.5]},
-                {"text": "가" * 10, "paper_ids": list(range(51))}, {"text": "가" * 10, "view": "x"}):
+                {"text": "가" * 10, "paper_ids": list(range(51))}):
         with pytest.raises(ValidationError):
             VerifyRequest(**bad)
 
 
 def test_summary_request_rules():
-    assert SummaryRequest(paper_id=41).view is None
+    assert SummaryRequest(paper_id=41, view="rnd").model_dump() == {"paper_id": 41}  # 예전 클라이언트가 보낸 view는 무시한다
     for bad in ({"paper_id": "41"}, {"paper_id": True}, {}):
         with pytest.raises(ValidationError):
             SummaryRequest(**bad)
@@ -200,14 +200,14 @@ def test_rag_response_omits_table_unless_set():
 
     @app.get("/plain", response_model=RagResponse)
     def plain():
-        return RagResponse(answer="a", level="L2", view="dev", latency_ms=1)
+        return RagResponse(answer="a", level="L2", latency_ms=1)
 
     @app.get("/prior", response_model=RagResponse)
     def prior():
-        return RagResponse(answer="a", level="L2", view="dev", latency_ms=1, table=[{"paper_id": 1, "title": "T"}])
+        return RagResponse(answer="a", level="L2", latency_ms=1, table=[{"paper_id": 1, "title": "T"}])
 
     c = TestClient(app)
-    assert set(c.get("/plain").json()) == {"answer", "sources", "source_details", "needs_review", "handoff", "level", "view", "latency_ms"}
+    assert set(c.get("/plain").json()) == {"answer", "sources", "source_details", "needs_review", "handoff", "level", "latency_ms"}
     assert c.get("/prior").json()["table"] == [{"paper_id": 1, "title": "T"}]
 
 
@@ -217,12 +217,12 @@ def test_response_models_match_the_frontend_shapes():
         topics=[{"perspective": "limitation_fix", "title": "T", "question": "Q", "approach": "A",
                  "experiment": {"datasets": ["GLUE"], "baselines": ["LoRA"], "metrics": ["평균"]},
                  "based_on": ["S1"], "similar_papers": [{"paper_id": 42, "title": "QLoRA", "score": 0.71}]}],
-        view="dev", latency_ms=5)
+        latency_ms=5)
     assert topic.topics[0].ai_generated is True and topic.needs_review is True and topic.handoff is False
     verify = VerifyResponse(claims=[{"sentence": "s"}, {"sentence": "t", "verdict": "own_result", "delta": {"vs": "LoRA", "value": 0.9}}],
-                            view="rnd", latency_ms=5)
+                            latency_ms=5)
     assert verify.claims[0].verdict == "not_found" and verify.claims[1].delta.value == 0.9 and verify.needs_review is True
-    assert SummaryResponse(paper_id=41, title="T", view="dev", sections=[{"key": "problem", "title": "문제", "text": "..."}],
+    assert SummaryResponse(paper_id=41, title="T", sections=[{"key": "problem", "title": "문제", "text": "..."}],
                            latency_ms=3).sections[0].sources == []
     with pytest.raises(ValidationError):
         Claim(sentence="s", verdict="maybe")

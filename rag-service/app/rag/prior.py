@@ -17,10 +17,10 @@ from app.rag.context import Block, build_blocks, details_of, render_context, sou
 from app.rag.deps import CurrentUser, store
 from app.rag.errors import ApiError
 from app.rag.modes import adopt_block, clean_text, gather_evidence, map_safe
-from app.rag.pipeline import SOURCE_MAP, _not_found
+from app.rag.pipeline import ALL_SOURCES, _not_found
 from app.rag.prompts import (
     LEVEL_RULES, PRIOR_COLUMN_NAMES, PRIOR_COMPARE_PROMPT, PRIOR_COMPARE_USER, PRIOR_EVIDENCE_QUERIES, PRIOR_EXTRACT_PROMPT,
-    PRIOR_EXTRACT_USER, VIEW_RULES,
+    PRIOR_EXTRACT_USER, ANSWER_STYLE,
 )
 from app.rag.schemas import AnswerDraft, PriorRowDraft, RagRequest, RagResponse
 
@@ -32,14 +32,12 @@ _DIGIT_RE = re.compile(r"\d")
 
 def _paper_ids(req: RagRequest, team_id: int) -> list[int]:
     """대상 논문 id. 팀 색인에 없는 id(다른 팀의 논문 포함)는 말없이 뺀다."""
-    if "pdf" not in SOURCE_MAP[req.source]:
-        return []  # 이 저장소는 논문 본문(pdf)만 가진다
     limit = config_rag.PRIOR_MAX_PAPERS
     if req.scope.type == "paper" and req.scope.ids:
         indexed = store.paper_chunk_counts(team_id)
         return [pid for pid in dict.fromkeys(req.scope.ids) if pid in indexed][:limit]
     hits = store.search(
-        team_id, SOURCE_MAP[req.source], req.question, k=limit * 4,
+        team_id, ALL_SOURCES, req.question, k=limit * 4,
         tags=req.scope.tags if req.scope.type == "tag" else None, min_score=config_rag.MIN_SCORE,
     )
     ids: list[int] = []
@@ -95,7 +93,6 @@ def _table_text(rows: list[dict]) -> str:
 def run(req: RagRequest, user: CurrentUser, usage: dict | None = None) -> RagResponse:
     started = time.monotonic()
     level = req.level or "L2"
-    view = req.view or user.view or "dev"
     in_tok = out_tok = 0
     rows: list[dict] = []
     used: list[Block] = []
@@ -118,12 +115,12 @@ def run(req: RagRequest, user: CurrentUser, usage: dict | None = None) -> RagRes
             raise failures[0]  # 모든 논문이 실패했다면 '근거 없음'이 아니라 실패다
 
     if not used:
-        resp = _not_found(level, view)
+        resp = _not_found(level)
     else:
         fallback = f"선택한 {len(rows)}편을 정리표로 비교했어요. 칸마다 근거 쪽수를 확인하세요."
         review = False
         try:
-            system = PRIOR_COMPARE_PROMPT.format(level_rules=LEVEL_RULES[level], view_rules=VIEW_RULES[view])
+            system = PRIOR_COMPARE_PROMPT.format(level_rules=LEVEL_RULES[level], answer_style=ANSWER_STYLE)
             draft, i, o = llm.generate_structured(system, PRIOR_COMPARE_USER.format(table=_table_text(rows), question=req.question), AnswerDraft)
             in_tok, out_tok = in_tok + i, out_tok + o
             if draft.found and draft.answer.strip():
@@ -142,7 +139,6 @@ def run(req: RagRequest, user: CurrentUser, usage: dict | None = None) -> RagRes
             source_details=details_of(used),
             needs_review=review or bool(failures) or any(_DIGIT_RE.search(row[k] or "") for row in rows for k in COLUMNS),
             level=level,
-            view=view,
             latency_ms=0,
             table=rows,
         )

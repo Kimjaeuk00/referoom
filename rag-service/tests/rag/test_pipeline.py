@@ -6,10 +6,11 @@ from app.rag import config_rag, llm, pipeline
 from app.rag.context import build_blocks, render_context
 from app.rag.deps import CurrentUser
 from app.rag.errors import ApiError
+from app.rag.prompts import ANSWER_STYLE
 from app.rag.schemas import AnswerDraft, RagRequest
 from app.rag.store_stub import Hit
 
-USER = CurrentUser(user_id=12, username="tester", role="member", team_id=3, team_type="dev", view="dev")
+USER = CurrentUser(user_id=12, username="tester", role="member", team_id=3)
 REQ = RagRequest(question="LoRA는 어떤 파라미터를 학습하나요?")
 TITLE = "LoRA: Low-Rank Adaptation of Large Language Models"
 REAL_GENERATE = llm.generate  # conftest의 autouse 가짜로 바뀌기 전의 원본 (수집 시점에 캡처)
@@ -116,15 +117,15 @@ def test_annotation_plus_body_is_ok(fake_llm, set_hits):
     assert run().needs_review is False
 
 
-# ---- 수준 × 관점 ----
-def test_level_view_change_prompt_not_sources(fake_llm, set_hits):
+# ---- 수준 ----
+def test_level_changes_prompt_not_sources(fake_llm, set_hits):
     set_hits(hit())
-    base = run(level="L1", view="dev")
-    other = run(level="L3", view="rnd")
+    base = run(level="L1")
+    other = run(level="L3")
     (sys_a, _, _), (sys_b, _, _) = fake_llm.calls
     assert sys_a != sys_b
-    assert "입문" in sys_a and "구현 관점" in sys_a
-    assert "심화" in sys_b and "연구 관점" in sys_b
+    assert "입문" in sys_a and "심화" in sys_b
+    assert ANSWER_STYLE in sys_a and ANSWER_STYLE in sys_b  # 답변 스타일은 깊이와 관계없이 하나
     assert base.sources == other.sources
 
 
