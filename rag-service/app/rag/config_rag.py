@@ -88,5 +88,7 @@ TOPIC_SIMILAR_MIN_SCORE = float(os.getenv("TOPIC_SIMILAR_MIN_SCORE", "0.60"))  #
 # 원고 검증
 VERIFY_MAX_CLAIMS = int(os.getenv("VERIFY_MAX_CLAIMS", "12"))  # 한 원고에서 대조할 주장 수. 넘으면 앞에서부터 처리하고 warnings로 알린다 (원고 3,000자 기준 미측정)
 VERIFY_EVIDENCE_CHUNKS = int(os.getenv("VERIFY_EVIDENCE_CHUNKS", "3"))  # 주장마다 모으는 근거 청크 (미측정)
+VERIFY_WORKERS = int(os.getenv("VERIFY_WORKERS", "4"))  # 주장별 근거 읽기를 동시에 부르는 스레드 수 (미측정)
+VERIFY_TEXT_MAX_CHARS = int(os.getenv("VERIFY_TEXT_MAX_CHARS", "300"))  # 주장 문장·값·조건 하나의 글자 수 상한 (미측정)
 # 논문 요약
 SUMMARY_CHUNKS_PER_SECTION = int(os.getenv("SUMMARY_CHUNKS_PER_SECTION", "3"))  # 섹션 하나를 쓰려고 모으는 청크 (미측정)

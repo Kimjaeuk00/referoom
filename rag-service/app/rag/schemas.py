@@ -158,6 +158,30 @@ class TopicResponse(BaseModel):
 
 
 # ---- 검증 모드: POST /verify ----
+class ExtractedClaim(BaseModel):
+    """LLM 구조화 출력: 원고에서 뽑은 수치 주장 하나."""
+    sentence: str = Field(description="주장이 들어 있는 원고 문장(핵심 부분)")
+    subject: str | None = Field(default=None, description="값의 대상이 되는 방법·모델 이름")
+    metric: str | None = Field(default=None, description="지표나 항목 이름")
+    claimed_value: str | None = Field(default=None, description="원고가 말한 값. 숫자와 단위를 원고 표기 그대로")
+    dataset: str | None = Field(default=None, description="데이터셋이나 실험 조건(모델 크기 등). 없으면 null")
+    own_result: bool = Field(default=False, description="저자 본인의 새 실험 결과(제안 방법·우리·본 연구)이면 true, 선행연구의 값을 인용한 것이면 false")
+
+
+class ClaimExtraction(BaseModel):
+    claims: list[ExtractedClaim] = Field(default_factory=list)
+
+
+class EvidenceRead(BaseModel):
+    """LLM 구조화 출력: 근거에서 읽은 비교 값. 근거에 없으면 found_value와 label을 null로 둔다."""
+    found_value: str | None = Field(default=None, description="근거에 적힌 값. 숫자와 단위를 근거 표기 그대로")
+    found_subject: str | None = Field(default=None, description="그 값이 어느 방법·모델의 것인지")
+    found_dataset: str | None = Field(default=None, description="그 값이 보고된 데이터셋")
+    condition: str | None = Field(default=None, description="그 값이 보고된 조건(모델 크기·설정 등)을 한 문장으로")
+    same_conditions: Literal["yes", "no", "unknown"] = Field(default="unknown", description="주장의 대상·지표·데이터셋·모델 크기가 근거와 같으면 yes, 다르면 no, 알 수 없으면 unknown")
+    label: str | None = Field(default=None, description="값이 나온 근거 블록의 라벨 하나")
+
+
 class VerifyRequest(BaseModel):
     text: str = Field(max_length=3000)  # 원고. 로그·예외·색인에 남기지 않는다
     paper_ids: list[StrictInt] | None = Field(default=None, max_length=50)  # 없으면 팀 전체
