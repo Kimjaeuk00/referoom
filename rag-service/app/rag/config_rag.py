@@ -97,7 +97,11 @@ TOPIC_SIMILAR_MAX = int(os.getenv("TOPIC_SIMILAR_MAX", "3"))  # 후보마다 보
 # 실제 논문 6편(주제 후보 4개)으로 측정: 선택하지 않은 논문의 최고 유사도가 청크 기준 0.47~0.54, 제목·초록 기준 0.36~0.47이고, 무관한 논문(RETA-LLM)이
 # 관련 논문(Prefix-Tuning 등)과 같거나 더 높아 구분되지 않았다(한국어 질문↔영어 논문의 교차 언어 유사도라 판별력이 낮다). 그래서 엉뚱한 논문을 보여 주지 않도록
 # 0.60(REVIEW_SCORE와 같은 값)을 유지한다. 이 값에서는 사실상 표시되지 않는다. 판별력 있는 방법(영어 질의 생성 등)을 찾으면 다시 정한다
-TOPIC_SIMILAR_MIN_SCORE = float(os.getenv("TOPIC_SIMILAR_MIN_SCORE", "0.60"))  # 이 값 이상일 때만 '라이브러리 안의 유사 연구'로 보인다. REVIEW_SCORE와 같은 값에서 시작, 후보 질문-논문 점수 분포는 미측정
+# 2026-10-25 임계값 0으로 다시 측정(논문 6편, 선택 2편씩 두 조합, 후보 8개, 유사 연구 29건): 점수 0.47~0.65, 중앙값 0.51, 사분위 0.51/0.51/0.55.
+# LoRA·QLoRA를 고르면 나머지 PEFT 논문과 무관한 RETA-LLM이 0.48~0.56으로 섞여 1위가 되기도 했고(최고 0.56), Prefix·Prompt를 고르면 LoRA가 0.58~0.65로 앞섰다.
+# 즉 0.56 이하는 무관한 논문과 겹쳐 가려내지 못하고, 0.60 이상 5건(LoRA·Adapter)만 관련 논문이었다. 0.57~0.59는 관련 논문 2건을 더 살리지만 근거가 두 조합뿐이라 값은 그대로 둔다.
+# 한계: 유사 여부를 사람이 판정한 것이 아니라 논문 제목으로 본 관련성이며, 무관한 논문은 RETA-LLM 하나뿐이라 '관찰된 분포의 하위 구간 제거' 이상은 말할 수 없다
+TOPIC_SIMILAR_MIN_SCORE = float(os.getenv("TOPIC_SIMILAR_MIN_SCORE", "0.60"))  # 이 값 이상일 때만 '라이브러리 안의 유사 연구'로 보인다 (경계 값은 유지, 미만은 제거)
 # 원고 검증
 VERIFY_MAX_CLAIMS = int(os.getenv("VERIFY_MAX_CLAIMS", "12"))  # 한 원고에서 대조할 주장 수. 넘으면 앞에서부터 처리하고 warnings로 알린다 (원고 3,000자 기준 미측정)
 VERIFY_EVIDENCE_CHUNKS = int(os.getenv("VERIFY_EVIDENCE_CHUNKS", "3"))  # 주장마다 모으는 근거 청크 (미측정)

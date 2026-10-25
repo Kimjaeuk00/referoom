@@ -100,6 +100,13 @@ def test_paper_ids_tags_and_min_score_filters(index_dir):
     assert store.search(3, ["pdf"], "lora low rank matrices", k=5, min_score=0.99) == []
 
 
+def test_min_score_keeps_the_boundary_and_drops_below(index_dir):
+    build(index_dir, PAPERS)
+    top = store.search(3, ["pdf"], "lora low rank", k=1)[0].score
+    assert [h.score for h in store.search(3, ["pdf"], "lora low rank", k=1, min_score=top)] == [top]  # 같으면 유지
+    assert store.search(3, ["pdf"], "lora low rank", k=1, min_score=top + 1e-6) == []  # 미만이면 제거
+
+
 def test_chunks_of_paper_and_version(index_dir):
     meta = build(index_dir, PAPERS)
     hits = store.chunks_of_paper(3, 2, "anything", k=4)
