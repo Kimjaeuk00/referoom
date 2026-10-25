@@ -3,21 +3,17 @@ import { computed, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import { api, TIMEOUT } from '@/api/client'
 import { errorText } from '@/api/errors'
-import { useProfileStore } from '@/stores/profile'
 import { renderMarkdown } from '@/lib/markdown'
 import { formatDate, PAPER_STATUS, safeUrl, SOURCE_TYPE, toneOfTag } from '@/lib/format'
-import ViewSelector from '@/components/common/ViewSelector.vue'
 import StatusBanner from '@/components/common/StatusBanner.vue'
 import ReviewBadge from '@/components/qa/ReviewBadge.vue'
 import { usePdfOpener } from '@/composables/usePdfOpener'
 
 const route = useRoute()
-const profile = useProfileStore()
 
 const paper = ref(null)
 const loadError = ref(null)
 
-const view = ref(profile.view)
 const summary = ref(null)
 const summarizing = ref(false)
 const summaryError = ref(null)
@@ -73,7 +69,7 @@ async function summarize() {
   try {
     summary.value = await api.rag('/summary', {
       method: 'POST',
-      json: { paper_id: paper.value.id, view: view.value },
+      json: { paper_id: paper.value.id },
       timeout: TIMEOUT.query,
     })
   } catch (e) {
@@ -116,9 +112,8 @@ async function summarize() {
           <h2 id="summary-title">구조 요약</h2>
           <p class="hint">이 논문 안에서만 찾아 섹션별로 정리하고, 섹션마다 근거 쪽수를 붙여요.</p>
           <div class="summary-controls">
-            <ViewSelector v-model:view="view" :disabled="summarizing" />
             <button type="button" class="btn btn-primary" :disabled="summarizing || paper.status !== 'indexed'" @click="summarize">
-              {{ summarizing ? '요약을 만드는 중' : summary ? '이 조건으로 다시 요약' : '구조 요약 보기' }}
+              {{ summarizing ? '요약을 만드는 중' : summary ? '다시 요약' : '구조 요약 보기' }}
             </button>
           </div>
           <p v-if="paper.status !== 'indexed'" class="hint">색인이 끝난 논문만 요약할 수 있어요.</p>

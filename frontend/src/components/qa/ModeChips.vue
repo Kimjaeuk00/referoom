@@ -1,19 +1,17 @@
 <script setup>
 import { CHIP_MODES, MODES } from '@/lib/modes'
 
-// 선행연구·주제·검증 중 하나를 켜는 칩. 켠 칩을 다시 누르면 꺼지고 튜터가 된다. 어느 것도 켜지 않은 상태가 튜터다.
-const props = defineProps({
-  modelValue: { type: String, default: 'tutor' },
+// 연구 모드를 켰을 때 선행연구·주제·검증 중 하나를 고른다. 끄는 것은 ResearchToggle이 맡는다(켠 칩을 다시 눌러도 그대로다).
+defineProps({
+  modelValue: { type: String, default: 'prior' },
   disabled: { type: Boolean, default: false },
 })
 const emit = defineEmits(['update:modelValue'])
-
-const toggle = (mode) => emit('update:modelValue', props.modelValue === mode ? 'tutor' : mode)
 </script>
 
 <template>
-  <div class="segmented" role="group" aria-label="질문 모드">
-    <button v-for="mode in CHIP_MODES" :key="mode" type="button" :aria-pressed="modelValue === mode" :title="MODES[mode].hint" :disabled="disabled" @click="toggle(mode)">
+  <div class="segmented" role="group" aria-label="연구 모드 종류">
+    <button v-for="mode in CHIP_MODES" :key="mode" type="button" :aria-pressed="modelValue === mode" :title="MODES[mode].hint" :disabled="disabled" @click="emit('update:modelValue', mode)">
       {{ MODES[mode].label }}
     </button>
   </div>

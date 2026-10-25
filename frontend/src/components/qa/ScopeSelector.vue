@@ -2,19 +2,13 @@
 import { computed, ref } from 'vue'
 
 const props = defineProps({
-  source: { type: String, required: true }, // all | pdf | web
   scope: { type: Object, required: true }, // { type: 'all' } | { type: 'tag', tags } | { type: 'paper', ids }
   papers: { type: Array, default: () => [] },
   tags: { type: Array, default: () => [] },
   pickedTitle: { type: String, default: '' }, // 목록을 아직 못 받았을 때 보여줄 논문 제목
 })
-const emit = defineEmits(['update:source', 'update:scope'])
+const emit = defineEmits(['update:scope'])
 
-const SOURCES = [
-  ['all', '전체'],
-  ['pdf', 'PDF'],
-  ['web', '웹'],
-]
 const MODES = [
   ['all', '팀 전체'],
   ['tag', '태그로 좁히기'],
@@ -55,13 +49,6 @@ function pick(paper) {
 
 <template>
   <div class="scope">
-    <fieldset>
-      <legend class="label">찾을 자료</legend>
-      <div class="segmented">
-        <button v-for="[key, name] in SOURCES" :key="key" type="button" :aria-pressed="source === key" @click="emit('update:source', key)">{{ name }}</button>
-      </div>
-    </fieldset>
-
     <fieldset>
       <legend class="label">범위</legend>
       <div class="modes">

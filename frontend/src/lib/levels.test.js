@@ -2,12 +2,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import * as levels from './levels.js'
-import { canReask, depthNote, REASK_LEVEL, reaskLevel, TEAM_TYPES, VIEWS } from './levels.js'
+import { canReask, depthNote, REASK_LEVEL, reaskLevel } from './levels.js'
 
-test('수준 선택 API는 더 이상 없다: 남은 것은 관점·팀 유형·더 쉽게/더 깊게뿐', () => {
-  assert.deepEqual(Object.keys(levels).sort(), ['REASK_LEVEL', 'TEAM_TYPES', 'VIEWS', 'canReask', 'depthNote', 'reaskLevel'])
-  assert.deepEqual(Object.keys(VIEWS), ['dev', 'rnd'])
-  assert.deepEqual(Object.keys(TEAM_TYPES), ['dev', 'rnd'])
+test('수준·관점·팀 유형 선택 API는 더 이상 없다: 남은 것은 더 쉽게/더 깊게뿐', () => {
+  assert.deepEqual(Object.keys(levels).sort(), ['REASK_LEVEL', 'canReask', 'depthNote', 'reaskLevel'])
   assert.deepEqual(REASK_LEVEL, { easier: 'L1', deeper: 'L3' })
 })
 
