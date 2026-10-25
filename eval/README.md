@@ -8,7 +8,7 @@ RAG 서비스를 같은 질문으로 반복 측정한다. 질문은 모드(`tuto
 | 파일 | 내용 |
 |---|---|
 | `questions/rag.jsonl`, `rag_extra.jsonl`, `rag_visual.jsonl` | tutor 질문 69개(기존). 모두 `"mode": "tutor"` |
-| `questions/modes.jsonl` | prior·topic·verify 샘플 각 3개(`PR`·`TP`·`VF` 접두사). 실서버로 아직 돌리지 않은 초안이다 |
+| `questions/modes.jsonl` | prior·topic·verify 샘플 각 3개(`PR`·`TP`·`VF` 접두사). 2026-10-25에 실서버·실제 LLM으로 9개 모두 통과를 확인했다(표본이 작아 정확도 수치로 쓰지 않는다) |
 | `run_eval.py` | 질문 검증, 실서버 수집, 오프라인 재집계, 보고서 |
 | `mode_checks.py` | prior·topic·verify의 질문 검증·요청 생성·응답 검사(순수 함수) |
 | `baseline_bm25.py` | tutor용 키워드 검색 기준선(`--corpus`를 쓸 때만 `rank_bm25` 필요) |
@@ -57,13 +57,13 @@ RAG 서비스를 같은 질문으로 반복 측정한다. 질문은 모드(`tuto
 | verify | 판정 정확도 | `contains`가 문장·대상에 들어 있는 주장의 판정이 `verdicts` 중 하나다 |
 | | 판정의 근거 | `match`·`mismatch`·`condition_differs`는 라벨이 있고 `source_details`에 있다 |
 
-모든 모드에서 handoff 응답은 기대가 거절인 질문 외에는 실패다. HTTP·응답 구조 오류는 어느 항목의 성공으로도 세지 않는다.
+모든 모드에서 handoff 응답은 기대가 거절인 질문 외에는 실패다. 단 verify는 근거를 하나도 못 찾으면 handoff와 `not_found` 주장을 함께 돌려주므로, 기대 판정이 모두 `not_found`를 허용하는 질문(예: VF03)에서만 handoff를 실패로 보지 않는다. HTTP·응답 구조 오류는 어느 항목의 성공으로도 세지 않는다.
 결과 파일에는 질문·답변 원문과 토큰(JWT)을 남기지 않는다. `mode_detail`에는 `papers=2/2;cells=1/1;labels=ok` 같은 개수만 적는다.
 
 ## 최소 문항 규칙
 
 전체 20문항 이상, tutor `general` 12·`math` 3·`exception` 3 이상, prior·topic·verify는 각 3 이상. 현재는 tutor 69 + 새 모드 9 = 78문항이다.
-새 모드 샘플은 통과 여부를 가릴 만큼 검증된 정답이 아니라 **구조 시험용 초안**이다. 실서버에서 한 번 돌려 기대값(논문 제목, 쪽, 판정)을 사람이 확인한 뒤 늘린다.
+새 모드 샘플 9개는 실서버에서 한 번 돌려 모두 통과했지만(2026-10-25, 시드 라이브러리 기준), 모드당 3개뿐이라 **구조 시험용**이다. 정확도를 말하려면 문항을 늘리고 기대값(논문 제목, 쪽, 판정)을 사람이 확인한다.
 
 ## 실행
 

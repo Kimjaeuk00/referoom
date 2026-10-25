@@ -195,6 +195,10 @@ def test_verify_check():
     dora = sample("verify", "VF03")
     body = verify_body("not_found", labels=(), claims=[{"sentence": "DoRA는 71.2다", "subject": "DoRA", "verdict": "not_found", "labels": []}])
     assert mode_checks.check(dora, body) == (True, "claims=1/1;labels=ok")
+    # 근거를 하나도 못 찾으면 서버가 handoff와 not_found 주장을 함께 돌려준다: not_found를 기대한 질문만 통과
+    assert mode_checks.check(dora, {**body, "handoff": True}) == (True, "claims=1/1;labels=ok")
+    assert mode_checks.check(dora, {**body, "handoff": True, "claims": []})[0] is False        # 주장이 없으면 실패
+    assert mode_checks.check(sample("verify", "VF01"), verify_body("not_found", labels=(), handoff=True)) == (False, "handoff")
     # 조건 다름도 불일치도 모두 허용하는 질문(VF02)
     qlora = sample("verify", "VF02")
     for verdict in ("mismatch", "condition_differs"):

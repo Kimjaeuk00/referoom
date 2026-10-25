@@ -160,7 +160,9 @@ def _check_topic(item, body):
 
 
 def _check_verify(item, body):
-    if body["handoff"]:
+    # verify는 비교할 근거를 하나도 못 찾으면 handoff를 켜고 주장을 not_found로 돌려준다.
+    # 그래서 기대 판정이 모두 not_found를 허용할 때만 handoff를 실패로 보지 않는다.
+    if body["handoff"] and not all("not_found" in spec["verdicts"] for spec in item["expected_claims"]):
         return False, "handoff"
     claims, known = body["claims"], _labels(body)
     hits = 0
