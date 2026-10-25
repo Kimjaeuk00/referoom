@@ -9,7 +9,7 @@ import re
 import time
 
 from app.rag import config_rag, llm, page_images
-from app.rag.context import LABEL_RE, Block, build_blocks, details_of, render_context, source_strings, verify_citations
+from app.rag.context import LABEL_RE, Block, build_blocks, details_of, render_context, source_strings, split_label_groups, verify_citations
 from app.rag.deps import CurrentUser, store
 from app.rag.prompts import IMAGE_NOTE, LEVEL_RULES, SYSTEM_PROMPT, USER_PROMPT, VIEW_RULES
 from app.rag.schemas import RagRequest, RagResponse
@@ -150,14 +150,15 @@ def run(req: RagRequest, user: CurrentUser, usage: dict | None = None) -> RagRes
         elif not draft.found:
             resp = _not_found(level, view)
         else:
-            used, failed = verify_citations(draft.answer, draft.cited, blocks)
+            answer = split_label_groups(draft.answer)  # [S1, S2] → [S1] [S2] (화면의 근거 칩은 대괄호 하나에 라벨 하나만 알아본다)
+            used, failed = verify_citations(answer, draft.cited, blocks)
             top_score = max(h.score for h in hits)
             resp = RagResponse(
-                answer=draft.answer,
+                answer=answer,
                 sources=_source_strings(used),
                 source_details=_details(used),
                 # 이미지에서 읽은 값은 텍스트 근거로 대조할 수 없으므로 검수 대상으로 둔다
-                needs_review=needs_review(draft.answer, used, failed, top_score) or bool(images),
+                needs_review=needs_review(answer, used, failed, top_score) or bool(images),
                 level=level,
                 view=view,
                 latency_ms=0,

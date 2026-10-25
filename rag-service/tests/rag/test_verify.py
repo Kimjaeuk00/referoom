@@ -336,3 +336,110 @@ def test_api_not_ready_is_503(client, auth, fake_llm, monkeypatch):
     monkeypatch.setattr(router_modes.store, "readiness", lambda: {"embedder": False})
     r = client.post("/verify", json={"text": MANUSCRIPT}, headers=auth)
     assert (r.status_code, r.json()["code"]) == (503, "NOT_READY")
+
+
+def test_grouped_citations_in_the_draft_are_split_and_verified(fake_llm, lib):
+    prepare(fake_llm, FIVE, READS, draft=AnswerDraft(found=True, answer="일치와 불일치 [S1, S2]. 조건 [S3].", cited=["S1", "S2", "S3"]))
+    r = verify.run(req(), USER)
+    assert r.draft == "일치와 불일치 [S1] [S2]. 조건 [S3]."
+    prepare(fake_llm, FIVE, READS, draft=AnswerDraft(found=True, answer="없는 묶음 [S1, S99].", cited=["S1"]))
+    assert verify.run(req(), USER).draft == ""  # 묶음 안의 없는 라벨은 검증에서 걸러진다
+
+
+def test_english_search_text_is_used_for_retrieval_and_falls_back(fake_llm, lib):
+    with_text = ExtractedClaim(sentence="QLoRA는 65B를 24GB에서 학습한다", subject="QLoRA", metric="GPU 메모리", claimed_value="24GB",
+                               search_text="QLoRA fine-tune a 65B model on a single GPU memory")
+    prepare(fake_llm, [with_text, claim("LoRA는 0.3M이다", "LoRA", "0.3M")], {"QLoRA": read("48GB"), "LoRA": read("300K")})
+    verify.run(req(), USER)
+    assert lib[0]["query"] == "QLoRA fine-tune a 65B model on a single GPU memory"   # 영어 검색 문구를 그대로
+    assert lib[1]["query"] == "LoRA 지표 0.3M"                                       # 없으면 대상·지표·값을 이어 쓴다
+
+
+def test_extraction_prompt_demands_explicit_ownership_and_english_queries(fake_llm, lib):
+    prepare(fake_llm, FIVE, READS)
+    verify.run(req(), USER)
+    system = fake_llm.structured_calls[0][0]
+    assert "분명히 밝힐 때만" in system and "선행연구의 값으로 보고 false" in system and "search_text" in system and "영어" in system
+
+
+def test_read_prompt_asks_for_the_papers_value_even_when_it_differs(fake_llm, lib):
+    prepare(fake_llm, FIVE, READS)
+    verify.run(req(), USER)
+    system = [s for s, _, schema in fake_llm.structured_calls if schema is EvidenceRead][0]
+    # 실제 LLM이 원고의 24GB와 논문의 48GB가 달라서 값을 '없음'으로 답했던 문제(불일치를 근거 없음으로 놓침)를 막는 지시
+    assert "주장과 달라도 그 값을 그대로 적는다" in system and "맞는지 가리는 것은 이 단계가 아니다" in system
+
+
+def test_own_result_without_a_comparable_value_is_not_described_as_a_paper_value(fake_llm, lib):
+    # 실제 LLM이 비교할 수 없는 선행 값(88.6)을 '논문에서는 88.6'이라 써서 본인 결과를 틀린 것처럼 만들었던 문제
+    own = [claim("우리 방법은 GLUE 평균 88.1이다", "LoRA 비교", "88.1", own=True)]
+    prepare(fake_llm, own, {"LoRA 비교": read("88.6", label="S2", same="no", subject="LoRA")})
+    verify.run(req(), USER)
+    _, user, _ = [c for c in fake_llm.structured_calls if c[2] is AnswerDraft][0]
+    assert "본인 결과" in user and "원고 값 88.1" in user and "88.6" not in user and "논문 값" not in user
+    prepare(fake_llm, own, {"LoRA 비교": read("87.2", label="S2", same="yes", subject="LoRA")})
+    verify.run(req(), USER)
+    _, user, _ = [c for c in fake_llm.structured_calls if c[2] is AnswerDraft][-1]
+    assert "비교할 선행 값 87.2" in user and "차이 +0.9" in user
+
+
+def test_extraction_and_reading_are_deterministic_but_the_draft_is_not(fake_llm, lib):
+    prepare(fake_llm, FIVE, READS)
+    verify.run(req(), USER)
+    by_schema = {s.__name__: t for (_, _, s), t in zip(fake_llm.structured_calls, fake_llm.structured_temps)}
+    assert by_schema == {"ClaimExtraction": config_rag.EXTRACT_TEMPERATURE, "EvidenceRead": config_rag.EXTRACT_TEMPERATURE, "AnswerDraft": None}
+
+
+# ---- 다른 방법의 값 / 인용은 근거로 쓰인 블록만 ----
+
+@pytest.mark.parametrize("claimed_subject,found_subject,verdict", [
+    ("DoRA", "QLoRA", "not_found"),             # 라이브러리에 없는 방법의 값을 다른 방법에서 가져온 경우
+    ("DoRA", "Guanaco", "not_found"),
+    ("LoRA", "LoRA (r=8)", "match"),            # 이름이 포함 관계면 같은 방법으로 본다
+    ("LoRA GLUE", "LoRA", "match"),
+    ("LoRA", None, "match"),                    # 값이 누구의 것인지 읽지 못했으면 다른 방법으로 단정하지 않는다
+])
+def test_value_of_another_method_is_not_evidence(claimed_subject, found_subject, verdict):
+    ev = read("87.2", subject=found_subject)
+    j = verify.judge(ExtractedClaim(sentence="s", subject=claimed_subject, metric="m", claimed_value="87.2"), ev)
+    assert j.verdict == verdict
+    if verdict == "not_found":
+        assert j.found_value is None  # 엉뚱한 값을 논문 값으로 보여 주지 않는다
+
+
+def test_own_result_baseline_may_be_another_method():
+    # 본인 결과는 선행 방법(LoRA)과 견주는 것이라 값의 주인이 달라도 된다
+    j = verify.judge(c("88.1", own=True), read("87.2", subject="LoRA"))
+    assert j.verdict == "own_result" and j.delta.vs == "LoRA"
+
+
+def test_a_block_that_was_not_used_as_evidence_is_not_listed_as_a_source(fake_llm, lib):
+    # DoRA 주장에 대해 모델이 QLoRA의 값을 읽어 와도 그 블록은 출처에 오르지 않고 라벨도 붙지 않는다
+    dora = ExtractedClaim(sentence="DoRA는 MMLU 71.2다", subject="DoRA", metric="MMLU", claimed_value="71.2", search_text="DoRA MMLU 71.2 compared with QLoRA")
+    prepare(fake_llm, [dora, claim("LoRA는 0.3M이다", "LoRA", "0.3M")],
+            {"DoRA": read("63.4", label="S1", subject="QLoRA"), "LoRA": read("300K", label="S1", subject="LoRA")})
+    r = verify.run(req(), USER)
+    reads = [s for _, _, s in fake_llm.structured_calls if s is EvidenceRead]
+    assert len(reads) == 2  # DoRA 주장도 QLoRA 청크를 찾아 읽기까지 갔다(그래서 이 시험이 의미가 있다)
+    assert [c.verdict for c in r.claims] == ["not_found", "match"] and r.claims[0].labels == [] and r.claims[0].found_value is None
+    assert [d.label for d in r.source_details] == ["S1"] and r.source_details[0].paper_id == 41  # LoRA 블록 하나만
+
+
+def test_extraction_prompt_asks_for_a_measured_quantity_and_the_read_prompt_for_the_same_kind(fake_llm, lib):
+    prepare(fake_llm, FIVE, READS)
+    verify.run(req(), USER)
+    extract = fake_llm.structured_calls[0][0]
+    read_ = [s for s, _, schema in fake_llm.structured_calls if schema is EvidenceRead][0]
+    # 실제 LLM이 metric을 '가능 여부'로, 값을 '24GB GPU 한 장'으로 뽑아 읽기 단계가 값을 못 찾았던 문제를 막는 지시
+    assert "예/아니오는 metric으로 쓰지 않는다" in extract and "숫자와 단위만" in extract
+    assert "같은 종류의 값" in read_
+
+
+def test_condition_differs_rows_never_put_the_papers_number_in_the_draft_input(fake_llm, lib):
+    # 실제 LLM이 같은 초록의 다른 수치(3배)를 읽어 와서 초안이 '논문에서는 3배'라고 단정했던 문제
+    only = [claim("LoRA는 학습 파라미터를 10,000배 줄인다", "LoRA", "10,000배")]
+    prepare(fake_llm, only, {"LoRA": read("3 times", label="S1", same="no", subject="LoRA", condition="adaptive optimizer 사용 시")})
+    r = verify.run(req(), USER)
+    assert r.claims[0].verdict == "condition_differs" and r.claims[0].found_value == "3 times"  # 표에는 근거와 함께 보인다
+    _, user, _ = [c for c in fake_llm.structured_calls if c[2] is AnswerDraft][0]
+    assert "조건 다름" in user and "adaptive optimizer 사용 시" in user and "3 times" not in user and "논문 값" not in user

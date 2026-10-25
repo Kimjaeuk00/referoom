@@ -13,10 +13,10 @@ import re
 import time
 
 from app.rag import config_rag, llm
-from app.rag.context import Block, build_blocks, details_of, render_context, source_strings, verify_citations
+from app.rag.context import Block, build_blocks, details_of, render_context, source_strings, split_label_groups, verify_citations
 from app.rag.deps import CurrentUser, store
 from app.rag.errors import ApiError
-from app.rag.modes import adopt_block, clean_text, map_safe
+from app.rag.modes import adopt_block, clean_text, gather_evidence, map_safe
 from app.rag.pipeline import SOURCE_MAP, _not_found
 from app.rag.prompts import (
     LEVEL_RULES, PRIOR_COLUMN_NAMES, PRIOR_COMPARE_PROMPT, PRIOR_COMPARE_USER, PRIOR_EVIDENCE_QUERIES, PRIOR_EXTRACT_PROMPT,
@@ -53,23 +53,13 @@ def _paper_ids(req: RagRequest, team_id: int) -> list[int]:
 
 
 def _evidence(team_id: int, paper_id: int) -> list:
-    """한 논문의 근거 청크. 질의마다 상위 청크를 번갈아 모으고 중복은 뺀 뒤 쪽 순서로 놓는다."""
-    per_query = [store.chunks_of_paper(team_id, paper_id, q, k=config_rag.PRIOR_CHUNKS_PER_PAPER) for q in PRIOR_EVIDENCE_QUERIES]
-    chosen, seen = [], set()
-    for rank in range(config_rag.PRIOR_CHUNKS_PER_PAPER):
-        for hits in per_query:
-            if rank < len(hits):
-                h = hits[rank]
-                key = (h.metadata.get("page"), h.text[:80])
-                if key not in seen and len(chosen) < config_rag.PRIOR_CHUNKS_PER_PAPER:
-                    seen.add(key)
-                    chosen.append(h)
-    return sorted(chosen, key=lambda h: h.metadata.get("page") or 0)
+    """한 논문의 근거 청크: 앞쪽(제목·초록·서론)에 방법·결과·한계 질의의 상위 청크를 번갈아 더한다."""
+    return gather_evidence(team_id, paper_id, PRIOR_EVIDENCE_QUERIES, total=config_rag.PRIOR_CHUNKS_PER_PAPER, lead=config_rag.PRIOR_LEAD_CHUNKS)
 
 
 def _extract(blocks: list[Block]) -> tuple[PriorRowDraft, int, int]:
     user_msg = PRIOR_EXTRACT_USER.format(context=render_context(blocks), title=blocks[0].title)
-    return llm.generate_structured(PRIOR_EXTRACT_PROMPT, user_msg, PriorRowDraft)
+    return llm.generate_structured(PRIOR_EXTRACT_PROMPT, user_msg, PriorRowDraft, temperature=config_rag.EXTRACT_TEMPERATURE)
 
 
 def _row(blocks: list[Block], draft: PriorRowDraft, used: list[Block]) -> dict:
@@ -137,7 +127,7 @@ def run(req: RagRequest, user: CurrentUser, usage: dict | None = None) -> RagRes
             draft, i, o = llm.generate_structured(system, PRIOR_COMPARE_USER.format(table=_table_text(rows), question=req.question), AnswerDraft)
             in_tok, out_tok = in_tok + i, out_tok + o
             if draft.found and draft.answer.strip():
-                answer = draft.answer
+                answer = split_label_groups(draft.answer)  # [S1, S2] → [S1] [S2]
                 _, citation_failed = verify_citations(answer, draft.cited, used)
                 review = citation_failed
             else:

@@ -16,6 +16,7 @@ from app.rag import config_rag, llm
 from app.rag.context import LABEL_RE, Block, build_blocks, render_context, source_strings
 from app.rag.deps import CurrentUser, store
 from app.rag.errors import ApiError
+from app.rag.modes import gather_evidence
 from app.rag.pipeline import needs_review
 from app.rag.prompts import SUMMARY_CHECK, SUMMARY_EMPTY_TEXT, SUMMARY_PROMPT, SUMMARY_SECTIONS, SUMMARY_USER, VIEW_RULES
 from app.rag.schemas import SummaryDraft, SummaryRequest, SummaryResponse, SummarySection
@@ -32,14 +33,12 @@ def _sections(view: str) -> list[tuple[str, str, str, str]]:
 
 
 def _evidence(team_id: int, paper_id: int, sections: list[tuple[str, str, str, str]]) -> list:
-    chosen, seen = [], set()
-    for _, _, _, query in sections:
-        for h in store.chunks_of_paper(team_id, paper_id, query, k=config_rag.SUMMARY_CHUNKS_PER_SECTION):
-            key = (h.metadata.get("page"), h.text[:80])
-            if key not in seen:
-                seen.add(key)
-                chosen.append(h)
-    return sorted(chosen, key=lambda h: h.metadata.get("page") or 0)
+    """앞쪽(제목·초록·서론)에 섹션별 질의의 상위 청크를 번갈아 더한다."""
+    per_section = config_rag.SUMMARY_CHUNKS_PER_SECTION
+    return gather_evidence(
+        team_id, paper_id, [query for _, _, _, query in sections], total=config_rag.SUMMARY_LEAD_CHUNKS + per_section * len(sections),
+        lead=config_rag.SUMMARY_LEAD_CHUNKS, per_query=per_section,
+    )
 
 
 def _body(text: str | None) -> str | None:

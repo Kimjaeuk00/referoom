@@ -30,7 +30,7 @@ def lib(monkeypatch):
     calls = []
 
     def search(team_id, sources, query, k=5, paper_ids=None, tags=None, min_score=None):
-        calls.append({"team_id": team_id, "sources": sources, "query": query, "k": k, "min_score": min_score})
+        calls.append({"team_id": team_id, "sources": sources, "query": query, "k": k, "min_score": min_score, "paper_ids": paper_ids})
         return [chunk(41, 1, score=.95), chunk(43, 2, score=.72), chunk(43, 3, score=.81), chunk(77, 1, score=.66)]
 
     monkeypatch.setattr(topic.store, "search", search)
@@ -216,6 +216,7 @@ def test_similar_papers_exclude_selected_and_respect_threshold(fake_llm, lib):
     for t in r.topics:
         assert [(s.paper_id, s.score) for s in t.similar_papers] == [(43, 0.81), (77, 0.66)]  # 선택한 41은 빠지고 논문별 최고점, 점수 순
     assert lib[0]["min_score"] == config_rag.TOPIC_SIMILAR_MIN_SCORE and lib[0]["team_id"] == 3 and lib[0]["sources"] == ["pdf"]
+    assert lib[0]["paper_ids"] == [43, 77]  # 선택한 41·42는 검색 대상에서 뺀다(선택한 논문이 상위 청크를 모두 차지하지 않도록)
     assert "limitation_fix 주제" in lib[0]["query"]  # 후보의 제목과 질문으로 찾는다
 
 
@@ -283,3 +284,26 @@ def test_api_not_ready_is_503(client, auth, fake_llm, monkeypatch):
     monkeypatch.setattr(router_modes.store, "readiness", lambda: {"embedder": False})
     r = client.post("/topic-suggest", json=BODY, headers=auth)
     assert (r.status_code, r.json()["code"]) == (503, "NOT_READY")
+
+
+def test_limitation_evidence_uses_both_sentence_queries(fake_llm, lib, monkeypatch):
+    asked = []
+    monkeypatch.setattr(topic.store, "chunks_of_paper", lambda team_id, pid, q, k=4: asked.append((q, k)) or [chunk(pid, 3)][:k])
+    prepare(fake_llm)
+    call(paper_ids=[41])
+    from app.rag.prompts import TOPIC_LIMIT_QUERIES
+    assert [q for q, _ in asked] == list(TOPIC_LIMIT_QUERIES) and len(TOPIC_LIMIT_QUERIES) == 2
+    assert all(k == config_rag.TOPIC_CHUNKS_PER_PAPER for _, k in asked) and all(len(q.split()) >= 6 for q in TOPIC_LIMIT_QUERIES)
+
+
+def test_no_other_papers_means_no_similar_search(fake_llm, lib):
+    prepare(fake_llm)
+    r = call(paper_ids=[41, 42, 43, 77])  # 라이브러리의 모든 논문을 골랐다
+    assert all(t.similar_papers == [] for t in r.topics) and lib == []
+
+
+def test_limitation_extraction_is_deterministic_but_suggestion_is_not(fake_llm, lib):
+    prepare(fake_llm)
+    call()
+    by_schema = {s.__name__: t for (_, _, s), t in zip(fake_llm.structured_calls, fake_llm.structured_temps)}
+    assert by_schema == {"LimitationDraft": config_rag.EXTRACT_TEMPERATURE, "TopicDraft": None}

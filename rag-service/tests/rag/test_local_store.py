@@ -269,3 +269,24 @@ def test_paper_ids_with_meta(index_dir):
     store.reload()
     assert store.paper_ids_with_meta(3, "zotero_key") == {1}  # 비어 있거나 없는 값은 제외
     assert store.paper_ids_with_meta(3, "nope") == set() and store.paper_ids_with_meta(4, "zotero_key") == set()
+
+
+def test_lead_chunks_are_the_first_body_chunks_in_document_order(index_dir):
+    chunks = []
+    for pid, pages in {1: [(1, "title and abstract of paper one"), (2, "method of paper one"), (3, "results of paper one")],
+                       2: [(1, "paper two abstract")]}.items():
+        chunks += ingest.chunk_pages(pages, {"team_id": 3, "paper_id": pid, "source": f"p{pid}", "type": "body", "tags": "", "url": "u"})
+    chunks[1]["metadata"]["kind"] = "caption"  # 캡션은 개요가 아니다
+    ingest.save_index(index_dir / "3", chunks, embedder.embed_documents([c["text"] for c in chunks]), {"team_id": 3})
+    store.reload()
+    lead = store.lead_chunks(3, 1, k=2)
+    assert [(h.metadata["paper_id"], h.metadata["page"]) for h in lead] == [(1, 1), (1, 3)]  # 문서 순서, 캡션(2쪽)은 건너뛴다
+    assert all(h.score == 1.0 and h.metadata["source"] == "p1" for h in lead)               # 점수는 유사도가 아니라 고정값
+    assert [h.metadata["paper_id"] for h in store.lead_chunks(3, 2, k=5)] == [2]            # 다른 논문의 청크는 섞이지 않는다
+    assert store.lead_chunks(3, 99) == [] and store.lead_chunks(3, 1, k=0) == []
+    assert store.lead_chunks(4, 1) == []                                                     # 다른 팀(색인 없음)
+
+
+def test_lead_chunks_stub_has_the_same_signature():
+    from app.rag import store_stub
+    assert len(store_stub.lead_chunks(3, 41, k=3)) == 1 and store_stub.lead_chunks(3, 41, k=0) == []

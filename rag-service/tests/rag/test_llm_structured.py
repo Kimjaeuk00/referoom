@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, ValidationError
 
-from app.rag import context, llm, pipeline
+from app.rag import config_rag, context, llm, pipeline
 from app.rag.errors import ApiError, register_error_handlers
 from app.rag.schemas import (
     Claim, RagRequest, RagResponse, SummaryRequest, SummaryResponse, TopicRequest, TopicResponse, VerifyRequest, VerifyResponse,
@@ -226,3 +226,28 @@ def test_response_models_match_the_frontend_shapes():
                            latency_ms=3).sections[0].sources == []
     with pytest.raises(ValidationError):
         Claim(sentence="s", verdict="maybe")
+
+
+def test_temperature_is_passed_only_when_given(monkeypatch):
+    asked = []
+    chain = _Chain(out={"parsed": _Out(x=1), "raw": None})
+    monkeypatch.setattr(llm, "get_llm", lambda **kw: asked.append(kw) or _Model(chain))
+    REAL_STRUCTURED("s", "u", _Out)                        # 정하지 않으면 get_llm()을 인자 없이 부른다(설정값 사용)
+    REAL_STRUCTURED("s", "u", _Out, temperature=0.0)
+    assert asked == [{}, {"temperature": 0.0}]
+
+
+def test_get_llm_applies_temperature_but_not_to_reasoning_models(monkeypatch):
+    made = []
+
+    class Spy:
+        def __init__(self, **kw):
+            made.append(kw)
+
+    monkeypatch.setattr(llm, "ChatOpenAI", Spy)
+    llm.get_llm.cache_clear()
+    llm.get_llm("gpt-4o", None, 0.0)
+    llm.get_llm("gpt-4o")
+    llm.get_llm("gpt-6-luna", None, 0.0)  # 추론 모델은 온도를 받지 않는다
+    llm.get_llm.cache_clear()
+    assert [m["temperature"] for m in made] == [0.0, config_rag.LLM_TEMPERATURE, None]

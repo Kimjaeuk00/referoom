@@ -7,7 +7,7 @@
 import re
 from dataclasses import dataclass
 
-_NUMBER_RE = re.compile(r"([+-]?\d[\d,]*(?:\.\d+)?)\s*(%p|pp|%|p|kb|mb|gb|tb|k|m|b|x|배)?(?![a-z])", re.IGNORECASE)
+_NUMBER_RE = re.compile(r"([+-]?\d[\d,]*(?:\.\d+)?)\s*(%p|pp|%|p|kb|mb|gb|tb|times|fold|k|m|b|x|×|배)?(?![a-z])", re.IGNORECASE)
 
 _SCALES = {"k": 1e3, "m": 1e6, "b": 1e9}
 _MEMORY = {"kb": 1024.0, "mb": 1024.0 ** 2, "gb": 1024.0 ** 3, "tb": 1024.0 ** 4}
@@ -39,7 +39,7 @@ def parse_quantity(text: str | None) -> Quantity | None:
         return Quantity(value * _SCALES[unit], "count", decimals, _SCALES[unit])
     if unit in _MEMORY:
         return Quantity(value * _MEMORY[unit], "memory", decimals, _MEMORY[unit])
-    if unit in ("x", "배"):
+    if unit in ("x", "×", "배", "times", "fold"):
         return Quantity(value, "times", decimals, 1.0)
     return Quantity(value, "plain", decimals, 1.0)
 

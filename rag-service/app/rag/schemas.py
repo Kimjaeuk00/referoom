@@ -165,7 +165,8 @@ class ExtractedClaim(BaseModel):
     metric: str | None = Field(default=None, description="지표나 항목 이름")
     claimed_value: str | None = Field(default=None, description="원고가 말한 값. 숫자와 단위를 원고 표기 그대로")
     dataset: str | None = Field(default=None, description="데이터셋이나 실험 조건(모델 크기 등). 없으면 null")
-    own_result: bool = Field(default=False, description="저자 본인의 새 실험 결과(제안 방법·우리·본 연구)이면 true, 선행연구의 값을 인용한 것이면 false")
+    own_result: bool = Field(default=False, description="문장이 저자 본인의 새 결과임을 분명히 밝힐 때만 true(본 연구·우리·제안한 방법). 그렇지 않으면 false")
+    search_text: str | None = Field(default=None, description="이 값을 영어 논문에서 찾을 때 쓸 영어 검색 문구: 대상, 지표, 데이터셋, 값을 영어로")
 
 
 class ClaimExtraction(BaseModel):

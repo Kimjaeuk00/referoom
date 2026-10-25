@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass
 
 from app.rag import config_rag, llm
-from app.rag.context import Block, build_blocks, details_of, render_context, source_strings, verify_citations
+from app.rag.context import Block, build_blocks, details_of, render_context, source_strings, split_label_groups, verify_citations
 from app.rag.deps import CurrentUser, store
 from app.rag.errors import ApiError
 from app.rag.modes import adopt_block, clean_text, map_safe
@@ -47,8 +47,8 @@ class Judgement:
     delta: Delta | None = None
 
 
-def _datasets_conflict(claimed: str | None, found: str | None) -> bool:
-    """두 쪽 모두 데이터셋·조건 이름이 있고 서로 포함 관계도 아니면 충돌로 본다(알 수 없으면 충돌이 아니다)."""
+def _names_conflict(claimed: str | None, found: str | None) -> bool:
+    """두 쪽 모두 이름이 있고 서로 포함 관계도 아니면 충돌로 본다(알 수 없으면 충돌이 아니다). 데이터셋·방법 이름 비교에 쓴다."""
     a, b = _NAME_RE.sub("", (claimed or "").lower()), _NAME_RE.sub("", (found or "").lower())
     return bool(a and b and a not in b and b not in a)
 
@@ -63,13 +63,15 @@ def judge(claim: ExtractedClaim, read: EvidenceRead | None) -> Judgement:
     if not found:
         return Judgement("own_result" if claim.own_result else "not_found")
     condition = clean_text(read.condition, config_rag.VERIFY_TEXT_MAX_CHARS)
-    comparable = read.same_conditions != "no" and not _datasets_conflict(claim.dataset, read.found_dataset)
+    comparable = read.same_conditions != "no" and not _names_conflict(claim.dataset, read.found_dataset)
 
     if claim.own_result:  # 본인 결과는 검증 대상이 아니다. 비교할 수 있는 선행 값이 있을 때만 차이를 계산한다
         value = difference(claim.claimed_value, found) if comparable else None
         delta = Delta(vs=clean_text(read.found_subject, config_rag.VERIFY_TEXT_MAX_CHARS), value=value) if value is not None else None
         return Judgement("own_result", found, condition, delta)
 
+    if _names_conflict(claim.subject, read.found_subject):
+        return Judgement("not_found")  # 읽은 값이 다른 방법의 것이면 이 주장의 근거가 아니다(라이브러리에 없는 방법의 값을 다른 방법에서 가져오지 않는다)
     outcome = compare_values(claim.claimed_value, found)
     if not comparable or outcome == "unsure":
         return Judgement("condition_differs", found, condition or GENERIC_CONDITION)
@@ -85,7 +87,8 @@ def _scope_ids(req: VerifyRequest, team_id: int) -> list[int] | None:
 
 
 def _evidence(team_id: int, claim: ExtractedClaim, ids: list[int] | None) -> list[Block]:
-    query = " ".join(p for p in (claim.subject, claim.metric, claim.dataset, claim.claimed_value) if p) or claim.sentence
+    # 원고는 한국어, 논문은 영어인 경우가 많아 영어 검색 문구(search_text)를 우선 쓴다. 없으면 대상·지표·데이터셋·값을 이어 쓴다
+    query = (claim.search_text or "").strip() or " ".join(p for p in (claim.subject, claim.metric, claim.dataset, claim.claimed_value) if p) or claim.sentence
     hits = store.search(team_id, ["pdf"], query, k=config_rag.VERIFY_EVIDENCE_CHUNKS, paper_ids=ids, min_score=config_rag.MIN_SCORE)
     return build_blocks(hits)
 
@@ -97,13 +100,20 @@ def _read(claim: ExtractedClaim, blocks: list[Block]) -> tuple[EvidenceRead, int
         dataset=claim.dataset or none, claimed_value=claim.claimed_value or none, sentence=claim.sentence,
         kind="본인 결과" if claim.own_result else "선행연구 값 인용",
     )
-    return llm.generate_structured(VERIFY_READ_PROMPT, user, EvidenceRead)
+    return llm.generate_structured(VERIFY_READ_PROMPT, user, EvidenceRead, temperature=config_rag.EXTRACT_TEMPERATURE)
 
 
 def _draft(rows: list[Claim], view: str) -> tuple[AnswerDraft, int, int]:
     lines = []
     for row in rows:
-        found = f" / 논문 값 {row.found_value}" if row.found_value else ""
+        if row.verdict == "own_result":
+            # 본인 결과는 원고 값을 바로잡는 대상이 아니다. 비교할 수 있는 선행 값과의 차이가 있을 때만 서술하고, 없으면 원고 값만 둔다
+            found = f" / 비교할 선행 값 {row.found_value}" if row.delta and row.found_value else ""
+        elif row.verdict == "condition_differs":
+            # 조건이 달라 비교할 수 없는 값은 초안에 숫자로 쓰지 않는다(근거 읽기가 같은 쪽의 다른 수치를 집었을 수도 있다). 조건 설명만 준다
+            found = ""
+        else:
+            found = f" / 논문 값 {row.found_value}" if row.found_value else ""
         delta = f" / 차이 {row.delta.value:+g} (비교 대상 {row.delta.vs or '선행 값'})" if row.delta else ""
         condition = f" / 조건: {row.condition}" if row.condition else ""
         lines.append(
@@ -131,6 +141,7 @@ def run(req: VerifyRequest, user: CurrentUser, usage: dict | None = None) -> Ver
     else:
         extraction, i, o = llm.generate_structured(
             VERIFY_EXTRACT_PROMPT.format(max_claims=config_rag.VERIFY_MAX_CLAIMS), VERIFY_EXTRACT_USER.format(text=req.text), ClaimExtraction,
+            temperature=config_rag.EXTRACT_TEMPERATURE,
         )
         in_tok, out_tok = in_tok + i, out_tok + o
         claims = [c for c in extraction.claims if clean_text(c.sentence, config_rag.VERIFY_TEXT_MAX_CHARS)]
@@ -172,10 +183,10 @@ def run(req: VerifyRequest, user: CurrentUser, usage: dict | None = None) -> Ver
                         local = {b.label: b for b in blocks}
                         if not (read.found_value and read.label in local):
                             read = None  # 값이나 근거 라벨이 없으면(또는 없는 라벨이면) 근거가 없는 것으로 본다
-                        else:
-                            labels = [adopt(local[read.label])]
                 if judgement is None:
                     judgement = judge(claim, read)
+                    if read is not None and judgement.verdict != "not_found":
+                        labels = [adopt(local[read.label])]  # 근거로 쓰인 블록만 출처에 올린다
                 limit = config_rag.VERIFY_TEXT_MAX_CHARS
                 rows.append(Claim(
                     sentence=clean_text(claim.sentence, limit), subject=clean_text(claim.subject, limit), metric=clean_text(claim.metric, limit),
@@ -190,9 +201,10 @@ def run(req: VerifyRequest, user: CurrentUser, usage: dict | None = None) -> Ver
                 try:
                     draft, i, o = _draft(citable, view)
                     in_tok, out_tok = in_tok + i, out_tok + o
-                    _, citation_failed = verify_citations(draft.answer, draft.cited, used)
-                    if draft.found and draft.answer.strip() and not citation_failed:
-                        draft_text = draft.answer
+                    answer = split_label_groups(draft.answer)  # [S1, S2] → [S1] [S2]
+                    _, citation_failed = verify_citations(answer, draft.cited, used)
+                    if draft.found and answer.strip() and not citation_failed:
+                        draft_text = answer
                     else:
                         warnings.append("비교 문장 초안의 근거 표시를 확인하지 못해 초안을 내지 않았어요.")
                 except ApiError:

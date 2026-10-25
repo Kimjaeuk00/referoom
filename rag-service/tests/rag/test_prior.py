@@ -5,6 +5,7 @@ import pytest
 
 from app.rag import config_rag, pipeline, prior
 from app.rag.deps import CurrentUser
+from app.rag.prompts import PRIOR_EVIDENCE_QUERIES
 from app.rag.errors import ApiError
 from app.rag.schemas import AnswerDraft, PriorCell, PriorRowDraft, RagRequest
 from app.rag.store_stub import Hit
@@ -30,6 +31,7 @@ def lib(monkeypatch):
     monkeypatch.setattr(prior.store, "chunks_of_paper",
                         lambda team_id, pid, query, k=4: [chunk(pid, p, f"{TITLES[pid]} 본문 {p}쪽") for p in (1, 2, 3)][:k])  # 질의와 무관하게 같은 청크(중복 제거 확인)
     monkeypatch.setattr(prior.store, "search", lambda *a, **k: [chunk(41, 1, "a", .9), chunk(42, 2, "b", .8), chunk(41, 3, "c", .7)])
+    monkeypatch.setattr(prior.store, "lead_chunks", lambda team_id, pid, k=3: [])  # 앞쪽 청크는 아래 별도 시험에서 켠다
     return counts
 
 
@@ -246,3 +248,49 @@ def test_api_returns_table_and_records_tokens(client, auth, fake_llm, lib):
     # 튜터 요청에는 table 키가 없다
     tutor = client.post("/rag-query", json={"question": "LoRA란?"}, headers=auth).json()
     assert "table" not in tutor
+
+
+# ---- 근거 모으기: 앞쪽(제목·초록·서론) + 문장형 질의 ----
+
+def test_lead_chunks_come_first_and_count_against_the_budget(fake_llm, lib, monkeypatch):
+    asked = {}
+
+    def lead(team_id, pid, k=3):
+        asked["k"] = k
+        return [chunk(pid, 1, f"{TITLES[pid]} 초록"), chunk(pid, 1, f"{TITLES[pid]} 서론")][:k]
+
+    queries = []
+
+    def by_query(team_id, pid, query, k=4):
+        queries.append((query, k))
+        return [chunk(pid, 1, f"{TITLES[pid]} 초록"), chunk(pid, 5, f"{TITLES[pid]} 5쪽 {query[:4]}"), chunk(pid, 6, f"{TITLES[pid]} 6쪽 {query[:4]}")][:k]
+
+    monkeypatch.setattr(prior.store, "lead_chunks", lead)
+    monkeypatch.setattr(prior.store, "chunks_of_paper", by_query)
+    monkeypatch.setattr(config_rag, "PRIOR_CHUNKS_PER_PAPER", 5)
+    prepare(fake_llm, {"LoRA": LORA, "QLoRA": QLORA})
+    pipeline.run(req(scope={"type": "paper", "ids": [41]}), USER)
+    _, user, _ = [c for c in fake_llm.structured_calls if c[2] is PriorRowDraft][0]
+    assert asked["k"] == config_rag.PRIOR_LEAD_CHUNKS == 3 and "초록" in user and "서론" in user
+    assert user.count("초록") == 1                                  # 질의 결과에 같은 청크가 또 나와도 한 번만
+    assert [q for q, _ in queries] == list(PRIOR_EVIDENCE_QUERIES)  # 방법·결과·한계 질의가 각각 한 번씩
+    assert all(k == 3 for _, k in queries)                           # 남은 자리(5 − 앞쪽 2)만큼만 질의에서 가져온다
+
+
+def test_evidence_queries_are_sentences_not_keyword_lists():
+    # 키워드를 나열한 질의는 임베딩에서 잘 맞지 않았다(실제 논문 3편으로 확인). 문장형으로 유지한다
+    assert len(PRIOR_EVIDENCE_QUERIES) == 3
+    assert all(len(q.split()) >= 6 for q in PRIOR_EVIDENCE_QUERIES)
+
+
+def test_grouped_citations_are_split_in_the_comparison(fake_llm, lib):
+    prepare(fake_llm, {"LoRA": LORA, "QLoRA": QLORA}, compare=AnswerDraft(found=True, answer="두 방법은 닮았다 [S1, S2]. 차이도 있다 [S4,S5].", cited=["S1", "S2"]))
+    r = pipeline.run(req(), USER)
+    assert "[S1] [S2]" in r.answer and "[S4] [S5]" in r.answer and "[S1, S2]" not in r.answer
+
+
+def test_extraction_is_deterministic_but_the_comparison_is_not(fake_llm, lib):
+    prepare(fake_llm, {"LoRA": LORA, "QLoRA": QLORA})
+    pipeline.run(req(), USER)
+    by_schema = {s.__name__: t for (_, _, s), t in zip(fake_llm.structured_calls, fake_llm.structured_temps)}
+    assert by_schema == {"PriorRowDraft": config_rag.EXTRACT_TEMPERATURE, "AnswerDraft": None}  # 정리표 추출은 고정, 비교 문단은 기본값

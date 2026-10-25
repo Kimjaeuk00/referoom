@@ -16,9 +16,9 @@ import time
 from app.rag import config_rag, llm
 from app.rag.context import Block, build_blocks, details_of, render_context, source_strings
 from app.rag.deps import CurrentUser, store
-from app.rag.modes import adopt_block, clean_text, map_safe
+from app.rag.modes import adopt_block, clean_text, gather_evidence, map_safe
 from app.rag.prompts import (
-    TOPIC_LIMIT_PROMPT, TOPIC_LIMIT_QUERY, TOPIC_LIMIT_USER, TOPIC_PERSPECTIVES, TOPIC_SUGGEST_PROMPT, TOPIC_SUGGEST_USER, VIEW_RULES,
+    TOPIC_LIMIT_PROMPT, TOPIC_LIMIT_QUERIES, TOPIC_LIMIT_USER, TOPIC_PERSPECTIVES, TOPIC_SUGGEST_PROMPT, TOPIC_SUGGEST_USER, VIEW_RULES,
 )
 from app.rag.schemas import (
     Experiment, Limitation, LimitationDraft, SimilarPaper, TopicCandidate, TopicDraft, TopicRequest, TopicResponse,
@@ -28,14 +28,13 @@ logger = logging.getLogger("rag")
 
 
 def _evidence(team_id: int, paper_id: int) -> list:
-    hits = store.chunks_of_paper(team_id, paper_id, TOPIC_LIMIT_QUERY, k=config_rag.TOPIC_CHUNKS_PER_PAPER)
-    return sorted(hits, key=lambda h: h.metadata.get("page") or 0)
+    return gather_evidence(team_id, paper_id, TOPIC_LIMIT_QUERIES, total=config_rag.TOPIC_CHUNKS_PER_PAPER)
 
 
 def _extract(blocks: list[Block]) -> tuple[LimitationDraft, int, int]:
     system = TOPIC_LIMIT_PROMPT.format(max_items=config_rag.TOPIC_LIMITS_PER_PAPER)
     user = TOPIC_LIMIT_USER.format(context=render_context(blocks), title=blocks[0].title)
-    return llm.generate_structured(system, user, LimitationDraft)
+    return llm.generate_structured(system, user, LimitationDraft, temperature=config_rag.EXTRACT_TEMPERATURE)
 
 
 def _limitations(blocks: list[Block], draft: LimitationDraft, used: list[Block]) -> list[Limitation]:
@@ -92,11 +91,15 @@ def _candidates(draft: TopicDraft, valid_labels: set[str], n: int) -> list[Topic
     return out
 
 
-def _similar(team_id: int, topic: TopicCandidate, selected: set[int]) -> list[SimilarPaper]:
-    """선택하지 않은 라이브러리 논문 중 후보와 비슷한 것. 후보의 제목+질문과 청크의 유사도가 임계값 이상일 때만."""
+def _similar(team_id: int, topic: TopicCandidate, others: list[int]) -> list[SimilarPaper]:
+    """선택하지 않은 라이브러리 논문(others) 중 후보와 비슷한 것. 후보의 제목+질문과 청크의 유사도가 임계값 이상일 때만.
+
+    선택한 논문을 검색에서 빼지 않으면 상위 청크를 선택한 논문이 모두 차지해 다른 논문이 비교 대상에도 오르지 못한다."""
+    if not others:
+        return []
     try:
         hits = store.search(
-            team_id, ["pdf"], f"{topic.title}\n{topic.question}", k=config_rag.TOPIC_SIMILAR_SEARCH_K,
+            team_id, ["pdf"], f"{topic.title}\n{topic.question}", k=config_rag.TOPIC_SIMILAR_SEARCH_K, paper_ids=others,
             min_score=config_rag.TOPIC_SIMILAR_MIN_SCORE,
         )
     except Exception as e:  # 유사 연구는 덧붙이는 정보다. 실패해도 후보 자체는 돌려준다(종류만 기록)
@@ -105,7 +108,7 @@ def _similar(team_id: int, topic: TopicCandidate, selected: set[int]) -> list[Si
     best: dict[int, tuple[float, str]] = {}
     for h in hits:
         pid = h.metadata.get("paper_id")
-        if pid is None or pid in selected or (pid in best and best[pid][0] >= h.score):
+        if pid is None or pid not in others or (pid in best and best[pid][0] >= h.score):
             continue
         best[pid] = (h.score, h.metadata.get("source", ""))
     ranked = sorted(best.items(), key=lambda kv: -kv[1][0])[: config_rag.TOPIC_SIMILAR_MAX]
@@ -142,9 +145,9 @@ def run(req: TopicRequest, user: CurrentUser, usage: dict | None = None) -> Topi
         draft, i, o = _suggest(limitations, req, view)  # 실패하면 후보가 없으므로 오류로 응답한다
         in_tok, out_tok = in_tok + i, out_tok + o
         topics = _candidates(draft, {lim.label for lim in limitations}, req.n)
-        selected = set(ids)
+        others = [pid for pid in indexed if pid not in set(ids)]
         for topic in topics:
-            topic.similar_papers = _similar(user.team_id, topic, selected)
+            topic.similar_papers = _similar(user.team_id, topic, others)
 
     if topics:
         resp = TopicResponse(

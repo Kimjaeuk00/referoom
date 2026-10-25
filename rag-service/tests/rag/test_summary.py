@@ -13,8 +13,8 @@ from app.rag.store_stub import Hit
 USER = CurrentUser(user_id=12, username="tester", role="member", team_id=3, team_type="dev", view="dev")
 TITLE = "LoRA: Low-Rank Adaptation of Large Language Models"
 KEYS = ["problem", "idea", "method", "result", "limit", "check"]
-# 질의 종류별로 다른 쪽을 돌려준다. 'abstract' 질의 둘은 같은 쪽이라 중복이 제거된다
-PAGES = {"abstract": [1, 2], "method": [4, 5], "experiments": [7, 8], "limitations": [9], "implementation": [6], "related": [6]}
+# 질의 종류별로 다른 쪽을 돌려준다. 'What' 질의 둘(문제·핵심 아이디어)은 같은 쪽이라 중복이 제거된다
+PAGES = {"What": [1, 2], "Our": [4, 5], "Experimental": [7, 8], "Limitations": [9], "Implementation": [6], "How": [6]}
 
 
 def chunk(page):
@@ -32,6 +32,7 @@ def lib(monkeypatch):
         return [chunk(p) for p in PAGES[first]][:k]
 
     monkeypatch.setattr(summary.store, "chunks_of_paper", chunks_of_paper)
+    monkeypatch.setattr(summary.store, "lead_chunks", lambda team_id, pid, k=3: [])  # 앞쪽 청크는 아래 별도 시험에서 켠다
     return queries
 
 
@@ -136,7 +137,7 @@ def test_evidence_uses_one_query_per_section_and_one_llm_call(fake_llm, lib):
     summary.run(SummaryRequest(paper_id=41), USER, usage)
     assert len(lib) == 6 and len(fake_llm.structured_calls) == 1 and (usage["in_tok"], usage["out_tok"]) == (100, 20)
     _, user, _ = fake_llm.structured_calls[0]
-    # 'abstract' 질의 둘이 같은 쪽을 돌려줘도 블록은 한 번씩만(쪽 1,2,4,5,6,7,8,9 → S1..S8)
+    # 'What' 질의 둘이 같은 쪽을 돌려줘도 블록은 한 번씩만(쪽 1,2,4,5,6,7,8,9 → S1..S8)
     assert user.count("본문 1쪽") == 1 and "[S8]" in user and "[S9]" not in user and TITLE in user
 
 
@@ -215,3 +216,25 @@ def test_api_not_ready_is_503(client, auth, fake_llm, monkeypatch):
     monkeypatch.setattr(router_modes.store, "readiness", lambda: {"embedder": False})
     r = client.post("/summary", json={"paper_id": 41}, headers=auth)
     assert (r.status_code, r.json()["code"]) == (503, "NOT_READY")
+
+
+def test_lead_chunks_are_included_and_deduplicated(fake_llm, lib, monkeypatch):
+    asked = {}
+
+    def lead(team_id, pid, k=3):
+        asked["k"] = k
+        return [chunk(1), chunk(3)]  # 1쪽은 질의 결과와 겹치고, 3쪽은 질의가 가져오지 않는 쪽
+
+    monkeypatch.setattr(summary.store, "lead_chunks", lead)
+    prepare(fake_llm)
+    call()
+    _, user, _ = fake_llm.structured_calls[0]
+    assert asked["k"] == config_rag.SUMMARY_LEAD_CHUNKS == 3
+    assert user.count("본문 1쪽") == 1 and "본문 3쪽" in user  # 앞쪽 청크가 들어가고 중복은 없다
+    assert user.index("본문 1쪽") < user.index("본문 3쪽") < user.index("본문 4쪽")  # 쪽 순서
+
+
+def test_section_queries_are_sentences():
+    from app.rag.prompts import SUMMARY_CHECK, SUMMARY_SECTIONS
+    queries = [q for *_, q in [*SUMMARY_SECTIONS, *SUMMARY_CHECK.values()]]
+    assert all(len(q.split()) >= 6 for q in queries)  # 키워드 나열이 아니라 문장형 질의

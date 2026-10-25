@@ -97,3 +97,11 @@ def verify_citations(answer: str, cited: list[str], blocks: list[Block]) -> tupl
     ok = [c for c in dict.fromkeys(cited) if c in valid]
     used = [b for b in blocks if b.label in ok] or blocks
     return used, failed
+
+
+_GROUP_RE = re.compile(r"\[(S\d+(?:\s*[,，]\s*S\d+)+)\]")
+
+
+def split_label_groups(text: str) -> str:
+    """'[S1, S2]' 같은 묶음 인용을 '[S1] [S2]'로 바꾼다. 화면의 근거 칩과 인용 검증은 대괄호 하나에 라벨 하나만 알아본다."""
+    return _GROUP_RE.sub(lambda m: " ".join(f"[{label.strip()}]" for label in re.split(r"[,，]", m.group(1))), text)

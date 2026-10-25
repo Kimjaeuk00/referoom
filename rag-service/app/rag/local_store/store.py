@@ -131,6 +131,25 @@ def chunks_of_paper(team_id: int, paper_id: int, query: str, k: int = 4) -> list
     return _rank(idx, query, k, lambda meta, _s: meta.get("paper_id") == paper_id)
 
 
+def lead_chunks(team_id: int, paper_id: int, k: int = 3) -> list[Hit]:
+    """논문의 앞쪽 본문 청크 k개(문서 순서, 캡션 제외). 제목·초록·서론이 여기에 있다.
+
+    의미 검색은 '초록'이나 '서론'처럼 위치로 정해지는 내용을 질의로 찾지 못한다(실제 논문에서 초록이 상위에 오르지 않았다).
+    그래서 요약·정리표처럼 논문 전체의 개요가 필요한 기능은 이 함수로 앞부분을 가져온다. 점수는 유사도가 아니라 1.0으로 고정이다.
+    """
+    idx = _load(team_id)
+    if idx is None or k <= 0:
+        return []
+    out: list[Hit] = []
+    for c in idx.chunks:
+        meta = c["metadata"]
+        if meta.get("paper_id") == paper_id and meta.get("kind") != "caption":
+            out.append(Hit(text=c["text"], score=1.0, metadata=meta))
+            if len(out) >= k:
+                break
+    return out
+
+
 def index_version(team_id: int) -> int:
     idx = _load(team_id)
     return int(idx.meta["index_version"]) if idx else 0

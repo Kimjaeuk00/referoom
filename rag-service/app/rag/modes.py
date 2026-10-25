@@ -6,6 +6,7 @@ from dataclasses import replace
 from typing import Callable, TypeVar
 
 from app.rag.context import LABEL_RE, Block
+from app.rag.deps import store
 from app.rag.errors import ApiError
 
 logger = logging.getLogger("rag")
@@ -47,3 +48,25 @@ def clean_text(value: str | None, max_chars: int) -> str | None:
         return None
     text = _SPACE_RE.sub(" ", LABEL_RE.sub("", value)).strip()
     return text[:max_chars] if text else None
+
+
+def gather_evidence(team_id: int, paper_id: int, queries, total: int, lead: int = 0, per_query: int | None = None) -> list:
+    """한 논문의 근거 청크. 앞쪽 lead개(위치, 제목·초록·서론)에 질의별 상위 청크를 번갈아 더하고 중복은 뺀다. 쪽 순서로 돌려준다.
+
+    total은 청크 합계 상한이고, per_query는 질의마다 가져올 상위 개수(기본: 남은 자리 수)다.
+    """
+    chosen = list(store.lead_chunks(team_id, paper_id, k=lead)) if lead > 0 else []
+    seen = {(h.metadata.get("page"), h.text[:80]) for h in chosen}
+    budget = total - len(chosen)
+    k = per_query if per_query is not None else budget
+    if budget > 0 and k > 0:
+        per = [store.chunks_of_paper(team_id, paper_id, q, k=k) for q in queries]
+        for rank in range(k):
+            for hits in per:
+                if rank < len(hits) and len(chosen) < total:
+                    h = hits[rank]
+                    key = (h.metadata.get("page"), h.text[:80])
+                    if key not in seen:
+                        seen.add(key)
+                        chosen.append(h)
+    return sorted(chosen, key=lambda h: h.metadata.get("page") or 0)

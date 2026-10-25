@@ -58,8 +58,11 @@ def fake_llm(monkeypatch):
     state["structured"] = {}
     state["structured_tokens"] = (100, 20)
 
-    def generate_structured(system, user, schema):
+    structured_temps = []
+
+    def generate_structured(system, user, schema, temperature=None):
         structured_calls.append((system, user, schema))
+        structured_temps.append(temperature)  # 추출·판독 호출은 낮은 온도를 쓴다(structured_temps로 확인)
         prepared = state["structured"].get(schema)
         if prepared is None:
             raise AssertionError(f"준비하지 않은 구조화 LLM 호출: {schema.__name__}")
@@ -78,6 +81,7 @@ def fake_llm(monkeypatch):
     generate.calls = calls
     generate.state = state
     generate.structured_calls = structured_calls
+    generate.structured_temps = structured_temps
     return generate
 
 

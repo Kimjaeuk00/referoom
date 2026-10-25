@@ -18,15 +18,15 @@ def is_reasoning_model(model: str) -> bool:
     return model.startswith(("gpt-5", "gpt-6", "o1", "o3", "o4"))
 
 
-@lru_cache(maxsize=4)
-def get_llm(model: str | None = None, reasoning_effort: str | None = None) -> ChatOpenAI:
+@lru_cache(maxsize=8)
+def get_llm(model: str | None = None, reasoning_effort: str | None = None, temperature: float | None = None) -> ChatOpenAI:
     model = model or config_rag.LLM_MODEL
     reasoning = is_reasoning_model(model)
     return ChatOpenAI(
         model=model,
         api_key=config_rag.LLM_API_KEY,
         base_url=config_rag.LLM_BASE_URL,
-        temperature=None if reasoning else config_rag.LLM_TEMPERATURE,
+        temperature=None if reasoning else (config_rag.LLM_TEMPERATURE if temperature is None else temperature),
         reasoning_effort=(reasoning_effort or config_rag.LLM_REASONING_EFFORT) if reasoning else None,
         timeout=30,
         max_retries=1,
@@ -56,12 +56,14 @@ def _invoke(model: ChatOpenAI, schema: type[BaseModel], messages: list) -> tuple
     return parsed, int(usage.get("input_tokens", 0)), int(usage.get("output_tokens", 0))
 
 
-def generate_structured(system: str, user: str, schema: type[BaseModel]) -> tuple[BaseModel, int, int]:
+def generate_structured(system: str, user: str, schema: type[BaseModel], temperature: float | None = None) -> tuple[BaseModel, int, int]:
     """임의의 Pydantic 스키마로 구조화 출력을 받는다(텍스트 전용). 반환: (schema 인스턴스, 입력 토큰, 출력 토큰).
 
     선행연구 표·주제 후보·원고 주장 같은 모드별 출력에 쓴다. 이미지가 필요한 답변 초안은 generate를 쓴다.
+    temperature: 정하지 않으면 설정값(LLM_TEMPERATURE). 추출·판독처럼 같은 입력에 같은 답이 나와야 하는 호출은 낮게 정한다(추론 모델에는 쓰이지 않는다).
     """
-    return _invoke(get_llm(), schema, [("system", system), ("human", user)])
+    model = get_llm() if temperature is None else get_llm(temperature=temperature)
+    return _invoke(model, schema, [("system", system), ("human", user)])
 
 
 def generate(system: str, user: str, images: list[tuple[str, str]] | None = None) -> tuple[AnswerDraft, int, int]:
