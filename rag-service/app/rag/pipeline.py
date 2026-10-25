@@ -85,6 +85,10 @@ def _image_retry(system: str, user_msg: str, team_id: int, target: list[Block]):
 
 
 def run(req: RagRequest, user: CurrentUser, usage: dict | None = None) -> RagResponse:
+    if req.mode == "prior":
+        from app.rag import prior  # 지연 import: prior가 이 파일의 SOURCE_MAP·_not_found를 쓰므로 순환을 피한다
+
+        return prior.run(req, user, usage)
     started = time.monotonic()
     # v0.2: 사용자 수준 설정은 없다. level은 '더 쉽게/더 깊게' 요청이 body로 보낼 때만 오고(L1/L3), 없으면 기본 깊이(L2 규칙)다.
     level = req.level or "L2"

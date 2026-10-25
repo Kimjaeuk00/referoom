@@ -35,6 +35,18 @@ class AnswerDraft(BaseModel):
     cited: list[str] = Field(default_factory=list, description="실제 인용한 라벨 예: ['S1','S3']")
 
 
+class PriorCell(BaseModel):
+    """선행연구 정리표의 한 칸. 근거에 없으면 value와 label 모두 null."""
+    key: Literal["problem", "method", "dataset", "metric", "result", "limitation"]
+    value: str | None = Field(default=None, description="근거에 있는 내용. 없으면 null")
+    label: str | None = Field(default=None, description="값의 근거가 된 블록의 라벨 하나. 예: S2")
+
+
+class PriorRowDraft(BaseModel):
+    """LLM 구조화 출력: 논문 한 편의 정리표 행 (칸 6개)."""
+    cells: list[PriorCell] = Field(default_factory=list)
+
+
 class SourceDetail(BaseModel):
     label: str
     paper_id: int | None = None

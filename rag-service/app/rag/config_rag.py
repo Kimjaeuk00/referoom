@@ -74,6 +74,7 @@ TOPIC_CACHE_SECONDS = int(os.getenv("TOPIC_CACHE_SECONDS", "600"))  # 검색한 
 PRIOR_MAX_PAPERS = int(os.getenv("PRIOR_MAX_PAPERS", "10"))  # 한 번에 비교할 논문 수. 프론트의 한 번에 수집·선택 상한(10)과 같다
 PRIOR_CHUNKS_PER_PAPER = int(os.getenv("PRIOR_CHUNKS_PER_PAPER", "4"))  # 논문당 근거 청크. 1000자 청크 4개 ≈ 4,000자 (미측정)
 PRIOR_WORKERS = int(os.getenv("PRIOR_WORKERS", "4"))  # 논문별 추출을 동시에 부르는 스레드 수. OpenAI 속도 제한에 걸리면 줄인다 (미측정)
+PRIOR_CELL_MAX_CHARS = int(os.getenv("PRIOR_CELL_MAX_CHARS", "300"))  # 표 한 칸의 글자 수 상한. 프롬프트는 100자 안팎을 요청하고 넘치는 값만 자른다 (미측정)
 # 주제 제안
 TOPIC_MAX_PAPERS = int(os.getenv("TOPIC_MAX_PAPERS", "10"))  # 대상 논문 상한 (요청 검증과 같은 값)
 TOPIC_CHUNKS_PER_PAPER = int(os.getenv("TOPIC_CHUNKS_PER_PAPER", "3"))  # '한계·향후 연구' 질의로 논문당 모으는 청크 (미측정)

@@ -35,6 +35,11 @@ def chunks_of_paper(team_id: int, paper_id: int, query: str, k: int = 4) -> list
     return [_DUMMY][:k]
 
 
+def paper_chunk_counts(team_id: int) -> dict[int, int]:
+    """논문별 색인된 청크 수. local_store와 같은 형태(스텁은 논문 41 하나)."""
+    return {41: 1}
+
+
 def index_version(team_id: int) -> int:
     return 0
 

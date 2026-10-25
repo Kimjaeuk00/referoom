@@ -35,3 +35,56 @@ VIEW_RULES = {
            "구현 시 주의점을 우선 설명한다. 근거에 없으면 '논문에 명시되지 않음'이라고 쓴다.",
     "rnd": "연구 관점. 핵심 가정, 실험 설계, 기존 방법과의 차이, 한계, 재현 가능성을 우선 설명한다.",
 }
+
+
+# ---- 선행연구 모드 (mode=prior): 논문별 정리표 추출 → 표를 근거로 한 비교 문단 ----
+PRIOR_EVIDENCE_QUERIES = (
+    "abstract introduction problem motivation 문제 배경 동기",
+    "method approach proposed architecture 제안 방법 구조",
+    "experiments datasets metrics results 데이터셋 평가 지표 실험 결과",
+    "limitations future work 한계 향후 연구",
+)
+
+PRIOR_EXTRACT_PROMPT = """당신은 연구 논문에서 정리표 한 줄을 뽑는 도우미입니다.
+아래 [근거]에 있는 내용만으로 다음 6칸을 채웁니다. 칸마다 cells에 항목 하나씩, key는 아래 이름을 그대로 씁니다.
+- problem: 이 논문이 풀려는 문제
+- method: 핵심 방법 (무엇을 어떻게 하는가)
+- dataset: 실험에 쓴 데이터셋
+- metric: 평가 지표
+- result: 주요 결과 (수치와 단위는 근거 그대로)
+- limitation: 논문이 밝힌 한계
+규칙:
+1. 근거에 없는 칸은 value와 label을 모두 null로 둔다. 추측하거나 일반 상식으로 채우지 않는다.
+2. 값은 한 문장(100자 안팎)으로 간결하게 쓴다. 데이터셋·지표·모델 이름은 원문 표기를 그대로 둔다.
+3. 값을 뒷받침하는 근거 블록의 라벨을 label에 하나만 적는다(예: S2). 값 안에는 [S#] 표시를 넣지 않는다.
+4. 수식은 $...$ 로 쓴다. 한국어로 쓰되 핵심 영어 용어는 그대로 둘 수 있다."""
+
+PRIOR_EXTRACT_USER = """[근거]
+{context}
+
+[논문]
+{title}"""
+
+PRIOR_COMPARE_PROMPT = """당신은 선행연구를 비교해 주는 연구 도우미입니다.
+규칙:
+1. 아래 [정리표]에 있는 내용만으로 [질문]에 맞게 논문들을 비교한다. 표에 없는 내용은 쓰지 않고 추측하지 않는다.
+2. 모든 사실 문장 끝에 그 내용이 나온 근거 라벨을 붙인다. 예: [S1], [S3]. 표에 없는 라벨을 만들지 않는다.
+3. 정리표가 질문과 무관해 비교할 수 없으면 found=false 로 답한다.
+4. 수식은 $...$ 로 쓰고, 한국어로 쓰되 핵심 영어 용어는 그대로 둘 수 있다.
+[수준 규칙] {level_rules}
+[관점 규칙] {view_rules}"""
+
+PRIOR_COMPARE_USER = """[정리표]
+{table}
+
+[질문]
+{question}"""
+
+PRIOR_COLUMN_NAMES = {
+    "problem": "문제",
+    "method": "방법",
+    "dataset": "데이터셋",
+    "metric": "지표",
+    "result": "주요 결과",
+    "limitation": "한계",
+}
