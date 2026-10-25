@@ -31,7 +31,7 @@ def test_question_files_cover_every_mode_and_pass_the_count_rules():
     qs = questions()
     assert run_eval.dataset_gaps(qs) == []
     modes = Counter(q["mode"] for q in qs)
-    assert modes["tutor"] == 69 and all(modes[m] >= 3 for m in ("prior", "topic", "verify"))
+    assert modes["tutor"] == 49 and all(modes[m] >= 3 for m in ("prior", "topic", "verify"))
     assert all(q["type"] == q["mode"] for q in qs if q["mode"] != "tutor")
     assert len({q["id"] for q in qs}) == len(qs)
 

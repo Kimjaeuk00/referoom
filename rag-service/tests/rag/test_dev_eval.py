@@ -64,5 +64,6 @@ def test_extra_questions_file_is_valid():
     path = dev_eval.QUESTIONS.with_name("rag_extra.jsonl")
     qs = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
     base = [json.loads(l) for l in dev_eval.QUESTIONS.read_text(encoding="utf-8").splitlines() if l.strip()]
-    assert len(qs) == 23 and sum(q["should_refuse"] for q in qs) == 3
+    # 근거 논문이 라이브러리에 없는 질문을 정리한 뒤(2026-10-26) 이 파일은 거절 시험 11개(기존 3 + 바꾼 8)만 남았다
+    assert len(qs) == 11 and all(q["should_refuse"] and q["type"] == "exception" for q in qs)
     assert not {q["id"] for q in qs} & {q["id"] for q in base}  # id가 기존 질문과 겹치지 않음
