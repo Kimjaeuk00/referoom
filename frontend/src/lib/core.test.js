@@ -40,6 +40,13 @@ test('normalizeError: 서버 detail은 사용자 문구로 쓰지 않는다', ()
   assert.equal(err.message, '서비스를 준비 중이에요. 잠시 후 다시 시도해 주세요.')
 })
 
+test('normalizeError: 호출 한도(429)는 전용 문구를 쓰고 바로 다시 시도하게 하지 않는다', () => {
+  const err = normalizeError(429, { detail: 'x', code: 'RATE_LIMITED' })
+  assert.equal(err.message, '요청이 많아 잠시 쉬고 있어요. 조금 뒤에 다시 시도해 주세요.')
+  assert.equal(err.retryable, false)
+  assert.equal(normalizeError(429, null).code, 'RATE_LIMITED')
+})
+
 test('normalizeError: FastAPI 422 검증 응답에서 필드 이름을 뽑는다', () => {
   const err = normalizeError(422, { detail: [{ loc: ['body', 'question'], msg: 'too short' }] })
   assert.deepEqual(err.fields, ['question'])
