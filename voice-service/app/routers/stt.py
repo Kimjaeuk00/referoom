@@ -1,4 +1,4 @@
-"""STT API; production registration requires common-py require_team."""
+"""STT API; registered with common-py require_team."""
 
 from time import perf_counter
 
@@ -29,10 +29,10 @@ def create_stt_router(require_team) -> APIRouter:
     @router.post(
         "/stt", summary="음성을 텍스트로 변환", response_model=SttResponse,
         description="multipart 파일을 인식합니다. 최대 10MB·60초이며 결과가 비면 STT_EMPTY입니다. "
-                    "공통 require_team 연결 후 사용하는 보호 API입니다.",
+                    "공통 require_team으로 보호되는 API입니다.",
         responses={413: {"description": "10MB 초과", "content": {"application/json": {"example": {
                        "detail": "오디오 파일은 10MB 이하여야 합니다.", "code": "PAYLOAD_TOO_LARGE"}}}},
-                   422: {"description": "입력 검증 실패 또는 STT_EMPTY. 기본 Pydantic 오류의 공통 형식 연결은 보류 중입니다.",
+                   422: {"description": "입력 검증 실패 또는 STT_EMPTY. 공통 오류 형식으로 응답합니다.",
                          "content": {"application/json": {"examples": {
                              "empty": {"value": {"detail": "음성을 인식하지 못했어요. 다시 말씀해 주세요.", "code": "STT_EMPTY"}},
                              "invalid": {"value": {"detail": "지원하지 않는 오디오 형식입니다.", "code": "VALIDATION_ERROR"}},

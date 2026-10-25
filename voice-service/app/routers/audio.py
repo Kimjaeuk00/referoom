@@ -1,4 +1,4 @@
-"""Protected audio storage and router; production registration needs common-py."""
+"""Protected audio storage and router; registered with common-py."""
 
 from dataclasses import dataclass
 from pathlib import Path

@@ -1,21 +1,26 @@
-# docker compose -f docker-compose.yml up -d --build : Build the image and run the container (existing unused images must be deleted separately)
-# docker-compose -f docker-compose.yml up -d : If no image exists, build and run the container; if an image exists, run the container directly without building
-# If "Docker Desktop (local/PC environment)" or "Docker Daemon (server/Linux environment)" is not installed/configured, run main directly via uvicorn locally
-
-# version: "3.9"
-
+# Voice-only helper. Run from repository root with -f voice-service/docker-compose.yml.
+# Supply real values at runtime; missing JWT_SECRET is rejected by common-py at startup.
 services:
   app:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: voice-service/Dockerfile
     ports:
       - "8008:8008"
-    volumes:
-      - dockervenv:/app/.venv
-      - .:/app # Mount the local project directory to the container's '/app'
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      JWT_SECRET: ${JWT_SECRET:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5174,http://localhost:8008}
+      WHISPER_MODEL: ${WHISPER_MODEL:-small}
+      TTS_MODEL: ${TTS_MODEL:-tts-1}
+      TTS_VOICE: ${TTS_VOICE:-nova}
+      RAG_URL: ${RAG_URL:-http://host.docker.internal:8001}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - voice-data:/app/voice-service/data
+      - whisper-cache:/home/app/.cache/huggingface
 
 volumes:
-  dockervenv:
+  voice-data:
+  whisper-cache:

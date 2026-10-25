@@ -83,8 +83,8 @@ uvicorn[standard]==0.35.0
 
 yarl==1.19.0
 
-# JWT authentication
-python-jose[cryptography]==3.3.0
+# Shared JWT authentication, errors and access logging (install from voice-service).
+-e ../common-py
 
 # Evaluation keyword baseline (DEV_04 section 5.2)
 rank-bm25==0.2.2
