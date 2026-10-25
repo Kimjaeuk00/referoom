@@ -67,3 +67,48 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")  # 30문항 비교
 # 후보의 관련도 = 주제 질의와 '제목+초록'의 bge-m3 코사인. 아래 값 미만은 low_relevance 경고만 붙이고 막지는 않는다
 TOPIC_MIN_RELEVANCE = float(os.getenv("TOPIC_MIN_RELEVANCE", "0.50"))  # 0.45→0.50: arXiv 후보 40건(질의 4개) 점수 0.43~0.74, 무관한 결과 0.43·0.47, 관련 결과 ≥0.53. 표본이 작아 후보가 쌓이면 다시 본다
 TOPIC_CACHE_SECONDS = int(os.getenv("TOPIC_CACHE_SECONDS", "600"))  # 검색한 후보를 /upload-topic이 다시 쓰도록 보관하는 시간
+
+# 팀당 호출 한도: 비용이 큰 경로(/verify, /topic-suggest, /summary, /rag-query mode=prior)가 함께 쓰는 한 팀의 호출 수. 0이면 꺼진다.
+# 기본값을 0으로 둔 이유: 팀원 수와 하루 질문 수를 아직 모른다. 실측 입력 토큰은 선행연구 7.3k, 검증 5.7k, 요약 3.7k, 주제 3.2k라
+# 호출 한 번이 튜터 질문의 몇 배 비용이다. 사용량을 정한 뒤 RATE_LIMIT_CALLS로 켠다. 프로세스 메모리 기준이라 워커가 여럿이면 근사치다
+RATE_LIMIT_CALLS = int(os.getenv("RATE_LIMIT_CALLS", "0"))
+RATE_LIMIT_WINDOW_SECONDS = float(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600"))  # 한도를 세는 창 길이(초). 기본 1시간
+
+# ---- v0.2 모드 (선행연구 정리표·주제 제안·원고 검증·논문 요약) ----
+# 추출·판독 호출(정리표 칸, 한계, 원고의 주장, 근거에서 읽은 값)은 같은 입력에 같은 답이 나와야 한다. 기본 온도(LLM_TEMPERATURE)로는 같은 원고의 검색 문구가
+# 실행마다 달라 같은 주장이 어느 때는 근거가 있고 어느 때는 없다고 나왔다(실제 호출 3회). 그래서 이 호출들은 0으로 고정한다. 추론 모델에는 적용되지 않는다
+EXTRACT_TEMPERATURE = float(os.getenv("EXTRACT_TEMPERATURE", "0"))
+# 아래 값은 호출 수·지연·비용의 상한을 정하는 시작값이다. 실제 논문으로 측정하기 전이라 '미측정'으로 표시하고, 측정하면 근거를 적어 바꾼다.
+# 선행연구: 논문마다 LLM 추출 1회 + 비교 답변 1회. 논문 수가 많을수록 호출이 늘어 병렬도와 근거량에 상한을 둔다
+PRIOR_MAX_PAPERS = int(os.getenv("PRIOR_MAX_PAPERS", "10"))  # 한 번에 비교할 논문 수. 프론트의 한 번에 수집·선택 상한(10)과 같다
+PRIOR_LEAD_CHUNKS = int(os.getenv("PRIOR_LEAD_CHUNKS", "3"))  # 논문의 앞쪽(제목·초록·서론) 청크 수. 실제 논문 3편에서 질의로는 초록이 상위에 오르지 않아 위치로 가져온다
+PRIOR_CHUNKS_PER_PAPER = int(os.getenv("PRIOR_CHUNKS_PER_PAPER", "7"))  # 논문당 근거 청크 합계(앞쪽 3 + 질의 4). 1000자 청크 7개 ≈ 7,000자 (미측정)
+PRIOR_WORKERS = int(os.getenv("PRIOR_WORKERS", "4"))  # 논문별 추출을 동시에 부르는 스레드 수. OpenAI 속도 제한에 걸리면 줄인다 (미측정)
+PRIOR_CELL_MAX_CHARS = int(os.getenv("PRIOR_CELL_MAX_CHARS", "300"))  # 표 한 칸의 글자 수 상한. 프롬프트는 100자 안팎을 요청하고 넘치는 값만 자른다 (미측정)
+# 주제 제안
+TOPIC_MAX_PAPERS = int(os.getenv("TOPIC_MAX_PAPERS", "10"))  # 대상 논문 상한 (요청 검증과 같은 값)
+TOPIC_CHUNKS_PER_PAPER = int(os.getenv("TOPIC_CHUNKS_PER_PAPER", "4"))  # '한계·향후 연구' 질의 2개로 논문당 모으는 청크 합계 (미측정)
+TOPIC_LIMITS_PER_PAPER = int(os.getenv("TOPIC_LIMITS_PER_PAPER", "2"))  # 논문 한 편에서 뽑는 한계 수. 후보 4개가 서로 다른 한계를 쓰기에 충분한 양으로 잡은 값 (미측정)
+TOPIC_SIMILAR_SEARCH_K = int(os.getenv("TOPIC_SIMILAR_SEARCH_K", "20"))  # 유사 연구를 찾으려고 검색하는 청크 수. 선택한 논문의 청크를 빼고도 남도록 넉넉히 (미측정)
+TOPIC_WORKERS = int(os.getenv("TOPIC_WORKERS", "4"))  # 논문별 한계 추출을 동시에 부르는 스레드 수 (미측정)
+TOPIC_TEXT_MAX_CHARS = int(os.getenv("TOPIC_TEXT_MAX_CHARS", "300"))  # 한계 요약·후보 문장 하나의 글자 수 상한 (미측정)
+TOPIC_LIST_MAX_ITEMS = int(os.getenv("TOPIC_LIST_MAX_ITEMS", "5"))  # 후보의 데이터셋·비교 대상·지표 목록마다의 항목 수 상한
+TOPIC_SIMILAR_MAX = int(os.getenv("TOPIC_SIMILAR_MAX", "3"))  # 후보마다 보여 주는 유사 연구 수
+# 실제 논문 6편(주제 후보 4개)으로 측정: 선택하지 않은 논문의 최고 유사도가 청크 기준 0.47~0.54, 제목·초록 기준 0.36~0.47이고, 무관한 논문(RETA-LLM)이
+# 관련 논문(Prefix-Tuning 등)과 같거나 더 높아 구분되지 않았다(한국어 질문↔영어 논문의 교차 언어 유사도라 판별력이 낮다). 그래서 엉뚱한 논문을 보여 주지 않도록
+# 0.60(REVIEW_SCORE와 같은 값)을 유지한다. 이 값에서는 사실상 표시되지 않는다. 판별력 있는 방법(영어 질의 생성 등)을 찾으면 다시 정한다
+# 2026-10-25 임계값 0으로 다시 측정(논문 6편, 선택 2편씩 두 조합, 후보 8개, 유사 연구 29건): 점수 0.47~0.65, 중앙값 0.51, 사분위 0.51/0.51/0.55.
+# LoRA·QLoRA를 고르면 나머지 PEFT 논문과 무관한 RETA-LLM이 0.48~0.56으로 섞여 1위가 되기도 했고(최고 0.56), Prefix·Prompt를 고르면 LoRA가 0.58~0.65로 앞섰다.
+# 즉 0.56 이하는 무관한 논문과 겹쳐 가려내지 못하고, 0.60 이상 5건(LoRA·Adapter)만 관련 논문이었다. 0.57~0.59는 관련 논문 2건을 더 살리지만 근거가 두 조합뿐이라 값은 그대로 둔다.
+# 한계: 유사 여부를 사람이 판정한 것이 아니라 논문 제목으로 본 관련성이며, 무관한 논문은 RETA-LLM 하나뿐이라 '관찰된 분포의 하위 구간 제거' 이상은 말할 수 없다
+TOPIC_SIMILAR_MIN_SCORE = float(os.getenv("TOPIC_SIMILAR_MIN_SCORE", "0.60"))  # 이 값 이상일 때만 '라이브러리 안의 유사 연구'로 보인다 (경계 값은 유지, 미만은 제거)
+# 원고 검증
+VERIFY_MAX_CLAIMS = int(os.getenv("VERIFY_MAX_CLAIMS", "12"))  # 한 원고에서 대조할 주장 수. 넘으면 앞에서부터 처리하고 warnings로 알린다 (원고 3,000자 기준 미측정)
+VERIFY_EVIDENCE_CHUNKS = int(os.getenv("VERIFY_EVIDENCE_CHUNKS", "3"))  # 주장마다 모으는 근거 청크 (미측정)
+VERIFY_WORKERS = int(os.getenv("VERIFY_WORKERS", "4"))  # 주장별 근거 읽기를 동시에 부르는 스레드 수 (미측정)
+VERIFY_TEXT_MAX_CHARS = int(os.getenv("VERIFY_TEXT_MAX_CHARS", "300"))  # 주장 문장·값·조건 하나의 글자 수 상한 (미측정)
+# 논문 요약
+SUMMARY_LEAD_CHUNKS = int(os.getenv("SUMMARY_LEAD_CHUNKS", "3"))  # 논문의 앞쪽(제목·초록·서론) 청크 수. 위치로 가져온다
+SUMMARY_CHUNKS_PER_SECTION = int(os.getenv("SUMMARY_CHUNKS_PER_SECTION", "2"))  # 섹션 하나를 쓰려고 질의로 모으는 청크 (미측정)
+SUMMARY_CONTEXT_CHARS = int(os.getenv("SUMMARY_CONTEXT_CHARS", "16000"))  # 요약 한 번에 LLM에 넣는 근거 글자 수 상한. 앞쪽 3 + 6섹션×2청크(최대 약 15,000자) (미측정)
+SUMMARY_TEXT_MAX_CHARS = int(os.getenv("SUMMARY_TEXT_MAX_CHARS", "1200"))  # 섹션 본문 글자 수 상한 (미측정)

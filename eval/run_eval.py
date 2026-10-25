@@ -19,18 +19,19 @@ import httpx
 
 # Script-local import; eval is not installed as a Python package.
 from baseline_bm25 import BM25Baseline, evidence_hit, load_corpus
+import mode_checks
 
 
 EVAL_DIR = Path(__file__).resolve().parent
 DEFAULT_RUBRIC = EVAL_DIR.parent / "voice-service" / "evaluation" / "rubric.json"
 JUDGE_METADATA_FIELDS = ["judge_in_tok", "judge_out_tok", "judge_latency_ms", "judge_resolved_model",
                          "judge_request_sha256", "judge_error_code"]
-FIELDS = ["id", "type", "status", "http_status", "handoff", "needs_review", "review_pass", "grounded",
+FIELDS = ["id", "type", "mode", "status", "http_status", "handoff", "needs_review", "review_pass", "grounded",
           "refusal_pass", "bm25_hit_at_k", "latency_ms", "client_latency_ms",
           "in_tok", "out_tok", "level", "view", "dataset_sha256", "response_sha256",
           "rubric_sha256", "judge_model", "judge_status", "accuracy", "hallucinated",
           "refusal_semantic_pass", "human_reviewed", "level_score", "math_correct",
-          "context_sha256", "estimated_cost", "cost_currency"] + JUDGE_METADATA_FIELDS
+          "mode_pass", "mode_detail", "context_sha256", "estimated_cost", "cost_currency"] + JUDGE_METADATA_FIELDS
 
 
 def fingerprint(value):
@@ -63,7 +64,8 @@ def review_record(item, row):
 def review_template(rows, questions, rubric):
     return {"dataset_sha256": fingerprint(questions), "rubric_sha256": fingerprint(rubric),
             "judge_model": None,
-            "records": [review_record(item, row) for item, row in zip(questions, rows) if row["status"] == "ok"]}
+            "records": [review_record(item, row) for item, row in zip(questions, rows)
+                        if row["status"] == "ok" and item["mode"] == "tutor"]}  # 자동·사람 판정은 tutor 답변만
 
 
 def _hash(value):
@@ -157,7 +159,7 @@ def apply_reviews(rows, questions, bundle, rubric):
         if not isinstance(record, dict) or not isinstance(record.get("id"), str) or record["id"] in records:
             raise ValueError("Duplicate or invalid review id")
         records[record["id"]] = record
-    successful = {row["id"] for row in rows if row["status"] == "ok"}
+    successful = {row["id"] for row in rows if row["status"] == "ok" and row["mode"] == "tutor"}
     if not set(records) <= successful:
         raise ValueError("Unknown or failed response in review")
     # Validate all records before mutating any row.
@@ -168,7 +170,7 @@ def apply_reviews(rows, questions, bundle, rubric):
         updated.update(accuracy=False if row["status"] != "ok" else None,
                        hallucinated=None, refusal_semantic_pass=None, human_reviewed=False,
                        level_score=None, math_correct=None, rubric_sha256=None, judge_model=None,
-                       context_sha256=None, judge_status="not_configured" if row["status"] == "ok" else "not_applicable")
+                       context_sha256=None, judge_status="not_configured" if row["status"] == "ok" and row["mode"] == "tutor" else "not_applicable")
         updated.update(dict.fromkeys(JUDGE_METADATA_FIELDS))
         if row["id"] in records:
             apply_judgment(by_question[row["id"]], updated, records[row["id"]], bundle["judge_model"], rubric)
@@ -189,7 +191,7 @@ def read_collection(path, questions):
     if len(rows) != len(questions):
         raise ValueError("Collection question count differs")
     booleans = {"handoff", "needs_review", "review_pass", "grounded", "refusal_pass", "accuracy",
-                "hallucinated", "refusal_semantic_pass", "human_reviewed", "math_correct", "bm25_hit_at_k"}
+                "hallucinated", "refusal_semantic_pass", "human_reviewed", "math_correct", "bm25_hit_at_k", "mode_pass"}
     integers = {"http_status", "in_tok", "out_tok", "level_score", "judge_in_tok", "judge_out_tok"}
     numbers = {"latency_ms", "client_latency_ms", "estimated_cost", "judge_latency_ms"}
     for row, item in zip(rows, questions):
@@ -210,10 +212,10 @@ def read_collection(path, questions):
                 row[key] = float(value)
                 if not _number(row[key]):
                     raise ValueError("Invalid collection metric")
-        if row["id"] != _csv_cell(item["id"]) or row["type"] != item["type"] or row["dataset_sha256"] != fingerprint(questions):
+        if row["id"] != _csv_cell(item["id"]) or row["type"] != item["type"] or row["mode"] != item["mode"] or row["dataset_sha256"] != fingerprint(questions):
             raise ValueError("Collection does not match questions")
         row["id"] = item["id"]
-        if row["level"] != item["level"] or row["view"] != item["view"] or row["status"] not in {
+        if row["level"] != item.get("level") or row["view"] != item["view"] or row["status"] not in {
             "ok", "request_error", "http_error", "invalid_response",
         }:
             raise ValueError("Collection request metadata differs")
@@ -223,12 +225,30 @@ def read_collection(path, questions):
         for key in ("accuracy", "hallucinated", "refusal_semantic_pass", "level_score", "math_correct",
                     "rubric_sha256", "judge_model", "context_sha256", "estimated_cost", "cost_currency"):
             row[key] = None
-        row["judge_status"] = "not_configured" if row["status"] == "ok" else "not_applicable"
+        row["judge_status"] = "not_configured" if row["status"] == "ok" and item["mode"] == "tutor" else "not_applicable"
         row["human_reviewed"] = False
         row.update(dict.fromkeys(JUDGE_METADATA_FIELDS))
         if row["status"] != "ok":
             row["accuracy"] = False
     return rows
+
+
+def _validate_tutor(item: dict) -> None:
+    """tutor 질문: 핵심어와, 거절이 아니면 근거 논문·페이지."""
+    if not isinstance(item["key_points"], list) or not all(
+        isinstance(point, str) and point.strip() for point in item["key_points"]
+    ):
+        raise ValueError
+    if not item["should_refuse"] and not item["key_points"]:
+        raise ValueError
+    if not item["should_refuse"]:
+        evidence = item["evidence"]
+        if not isinstance(evidence["paper"], str) or not evidence["paper"].strip():
+            raise ValueError
+        if not isinstance(evidence["pages"], list) or not evidence["pages"] or not all(
+            type(page) is int and page >= 1 for page in evidence["pages"]
+        ):
+            raise ValueError
 
 
 def load_questions(directory: Path) -> list[dict]:
@@ -245,30 +265,26 @@ def load_questions(directory: Path) -> list[dict]:
                         raise ValueError
                 if item["id"] in seen:
                     raise ValueError
-                if item["type"] not in {"general", "math", "level", "exception"}:
+                item.setdefault("mode", "tutor")
+                mode = item["mode"]
+                if mode not in mode_checks.MODES or item["view"] not in {"dev", "rnd"}:
                     raise ValueError
-                if item["level"] not in {"L1", "L2", "L3"} or item["view"] not in {"dev", "rnd"}:
+                # level은 사용자 수준이 아니라 이번 질문의 요청 깊이(L1 더 쉽게, L3 더 깊게, L2 기본)다. tutor는 필수, 다른 모드는 생략 가능
+                if item.get("level", None if mode == "tutor" else "L2") not in {"L1", "L2", "L3"}:
                     raise ValueError
                 if type(item["should_refuse"]) is not bool:
                     raise ValueError
-                if (item["type"] == "exception") != item["should_refuse"]:
+                if mode == "tutor":
+                    if item["type"] not in {"general", "math", "depth", "exception"} or (item["type"] == "exception") != item["should_refuse"]:
+                        raise ValueError
+                elif item["type"] != mode:
                     raise ValueError
                 if not 2 <= len(item["question"]) <= 1000:
                     raise ValueError
-                if not isinstance(item["key_points"], list) or not all(
-                    isinstance(point, str) and point.strip() for point in item["key_points"]
-                ):
-                    raise ValueError
-                if not item["should_refuse"] and not item["key_points"]:
-                    raise ValueError
-                if not item["should_refuse"]:
-                    evidence = item["evidence"]
-                    if not isinstance(evidence["paper"], str) or not evidence["paper"].strip():
-                        raise ValueError
-                    if not isinstance(evidence["pages"], list) or not evidence["pages"] or not all(
-                        type(page) is int and page >= 1 for page in evidence["pages"]
-                    ):
-                        raise ValueError
+                if mode == "tutor":
+                    _validate_tutor(item)
+                else:
+                    mode_checks.validate_item(item)
             except (ValueError, TypeError, KeyError):
                 raise ValueError(f"Invalid question or duplicate id at {path.name}:{number}") from None
             seen.add(item["id"])
@@ -279,13 +295,17 @@ def load_questions(directory: Path) -> list[dict]:
 
 
 def dataset_gaps(questions: list[dict]) -> list[str]:
-    counts = Counter(item["type"] for item in questions)
+    tutor = Counter(item["type"] for item in questions if item["mode"] == "tutor")
+    by_mode = Counter(item["mode"] for item in questions)
     gaps = []
     if len(questions) < 20:
         gaps.append("At least 20 questions are required")
-    for kind, minimum in (("general", 12), ("math", 3), ("level", 2), ("exception", 3)):
-        if counts[kind] < minimum:
-            gaps.append(f"{kind}: at least {minimum} required")
+    for kind, minimum in (("general", 12), ("math", 3), ("exception", 3)):
+        if tutor[kind] < minimum:
+            gaps.append(f"tutor {kind}: at least {minimum} required")
+    for mode in ("prior", "topic", "verify"):
+        if by_mode[mode] < 3:
+            gaps.append(f"{mode}: at least 3 required")
     return gaps
 
 
@@ -312,6 +332,18 @@ def valid_response(body) -> bool:
     )
 
 
+def _library(client, base_url, token):
+    """topic 질문의 논문 제목을 id로 바꾸기 위한 라이브러리 목록. 실패하면 None (토큰·예외 문구는 남기지 않는다)."""
+    try:
+        response = client.get(base_url.rstrip("/") + "/papers", params={"size": 200},
+                              headers={"Authorization": f"Bearer {token}"})
+        body = response.json() if response.status_code == 200 else None
+    except (httpx.RequestError, ValueError):
+        return None
+    items = body.get("items") if isinstance(body, dict) else None
+    return items if isinstance(items, list) else None
+
+
 def evaluate_questions(questions, client, base_url, token, top_k=5, baseline=None,
                        *, judge=None, judge_model=None, rubric=None):
     rubric = rubric or load_rubric()
@@ -319,32 +351,41 @@ def evaluate_questions(questions, client, base_url, token, top_k=5, baseline=Non
         raise ValueError("Fixed judge model identifier is required")
     if baseline is not None and any(
         item.get("source") != "pdf" or item.get("scope", {"type": "all"}) != {"type": "all"}
-        for item in questions
+        for item in questions if item["mode"] == "tutor"
     ):
         raise ValueError("BM25 currently requires source=pdf and scope=all for the same exported corpus")
     rows = []
+    library = None
     for item in questions:
+        mode = item["mode"]
+        tutor = mode == "tutor"
         row = dict.fromkeys(FIELDS)
-        row.update(id=item["id"], type=item["type"], status="request_error", level=item["level"], view=item["view"],
+        row.update(id=item["id"], type=item["type"], mode=mode, status="request_error", level=item.get("level"), view=item["view"],
                    dataset_sha256=fingerprint(questions), judge_status="not_applicable", accuracy=False,
                    human_reviewed=False)
-        request = {"question": item["question"], "level": item["level"],
-                   "view": item["view"], "top_k": top_k}
-        for field in ("source", "scope"):
-            if field in item:
-                request[field] = item[field]
-        if baseline is not None and not item["should_refuse"]:
+        paper_ids = None
+        if mode == "topic":
+            if library is None:
+                library = _library(client, base_url, token) or []
+            paper_ids = mode_checks.resolve_papers(item["papers"], library)  # 라이브러리에 없거나 모호하면 요청하지 않는다
+            if not paper_ids:
+                rows.append(row)
+                continue
+        path, request = mode_checks.build_request(item, top_k, paper_ids)
+        if not tutor:
+            row["mode_pass"] = False
+        if tutor and baseline is not None and not item["should_refuse"]:
             row["bm25_hit_at_k"] = evidence_hit(item["evidence"], baseline.search(item["question"], top_k))
-        if item["should_refuse"]:
+        if tutor and item["should_refuse"]:
             row["refusal_pass"] = False
-        else:
+        elif tutor:
             row["grounded"] = False
         if item["type"] == "math":
             row["review_pass"] = False
         started = perf_counter()
         try:
             response = client.post(
-                base_url.rstrip("/") + "/rag-query", json=request,
+                base_url.rstrip("/") + path, json=request,
                 headers={"Authorization": f"Bearer {token}"},
             )
         except httpx.RequestError:
@@ -360,28 +401,33 @@ def evaluate_questions(questions, client, base_url, token, top_k=5, baseline=Non
             continue
         try:
             body = response.json()
-            valid = valid_response(body)
-            if valid:
-                valid = body["level"] == item["level"] and body["view"] == item["view"]
+            if mode in ("tutor", "prior"):
+                valid = valid_response(body) and body["view"] == item["view"] and (
+                    item.get("level") is None or body["level"] == item["level"])
+                valid = valid and (tutor or mode_checks.valid_mode_response(mode, body))
+            else:
+                valid = mode_checks.valid_mode_response(mode, body) and _number(body.get("latency_ms"))
         except ValueError:
             valid = False
         if not valid:
             row["status"] = "invalid_response"
             rows.append(row)
             continue
-        row.update(status="ok", handoff=body["handoff"], needs_review=body["needs_review"],
+        row.update(status="ok", handoff=body["handoff"], needs_review=body["needs_review"] if type(body.get("needs_review")) is bool else None,
                    latency_ms=body["latency_ms"], response_sha256=fingerprint(body),
-                   accuracy=None, judge_status="not_configured")
+                   accuracy=None, judge_status="not_configured" if tutor else "not_applicable")
         if item["type"] == "math":
             row["review_pass"] = body["needs_review"]
         for key in ("in_tok", "out_tok"):
             if type(body.get(key)) is int and body[key] >= 0:
                 row[key] = body[key]
-        if item["should_refuse"]:
+        if not tutor:
+            row["mode_pass"], row["mode_detail"] = mode_checks.check(item, body)
+        elif item["should_refuse"]:
             row["refusal_pass"] = body["handoff"] and not body["sources"] and not body["source_details"]
         else:
             row["grounded"] = not body["handoff"] and evidence_hit(item["evidence"], body["source_details"])
-        if judge is not None:
+        if judge is not None and tutor:
             row.update(judge_model=judge_model, rubric_sha256=fingerprint(rubric))
             try:
                 record = judge(question=deepcopy(item), response=deepcopy(body), rubric=deepcopy(rubric))
@@ -412,16 +458,19 @@ def evaluate_questions(questions, client, base_url, token, top_k=5, baseline=Non
 
 
 def summarize(rows):
-    regular = [row for row in rows if row["type"] != "exception"]
-    exceptions = [row for row in rows if row["type"] == "exception"]
+    tutor = [row for row in rows if row["mode"] == "tutor"]
+    regular = [row for row in tutor if row["type"] != "exception"]
+    exceptions = [row for row in tutor if row["type"] == "exception"]
     latency = [row["latency_ms"] for row in rows if row["status"] == "ok"]
     bm25 = [row["bm25_hit_at_k"] for row in regular if row["bm25_hit_at_k"] is not None]
-    math_rows = [row for row in rows if row["type"] == "math"]
-    accuracy_known = [row for row in rows if row.get("accuracy") is not None]
-    hallucination_known = [row for row in rows if row.get("hallucinated") is not None]
+    math_rows = [row for row in tutor if row["type"] == "math"]
+    accuracy_known = [row for row in tutor if row.get("accuracy") is not None]
+    hallucination_known = [row for row in tutor if row.get("hallucinated") is not None]
+    modes = {mode: {"total": sum(r["mode"] == mode for r in rows), "ok": sum(r["mode"] == mode and r["status"] == "ok" for r in rows),
+                    "pass": sum(r["mode"] == mode and r["mode_pass"] is True for r in rows)} for mode in ("prior", "topic", "verify")}
     levels = {}
     for level in ("L1", "L2", "L3"):
-        scores = [row["level_score"] for row in rows if row.get("level") == level
+        scores = [row["level_score"] for row in tutor if row.get("level") == level
                   and row.get("human_reviewed") and row.get("level_score") is not None]
         levels[level] = {"samples": len(scores), "mean": statistics.mean(scores) if scores else None}
     costs = [row for row in rows if row.get("estimated_cost") is not None]
@@ -429,7 +478,7 @@ def summarize(rows):
     judge_usage = [row for row in rows if type(row.get("judge_in_tok")) is int and type(row.get("judge_out_tok")) is int]
     judge_latency = [row["judge_latency_ms"] for row in rows if row.get("judge_latency_ms") is not None]
     return {
-        "total": len(rows), "http_ok": sum(row["status"] == "ok" for row in rows),
+        "total": len(rows), "tutor_total": len(tutor), "modes": modes, "http_ok": sum(row["status"] == "ok" for row in rows),
         "grounded_pass": sum(row["grounded"] is True for row in regular), "grounded_total": len(regular),
         "refusal_pass": sum(row["refusal_pass"] is True for row in exceptions), "refusal_total": len(exceptions),
         "mean_latency_ms": statistics.mean(latency) if latency else None,
@@ -437,8 +486,8 @@ def summarize(rows):
         "review_pass": sum(row["review_pass"] is True for row in math_rows), "review_total": len(math_rows),
         "refusal_semantic_known": sum(row.get("refusal_semantic_pass") is not None for row in exceptions),
         "refusal_semantic_pass": sum(row.get("refusal_semantic_pass") is True for row in exceptions),
-        "accuracy_pass": sum(row.get("accuracy") is True for row in rows),
-        "accuracy_known": len(accuracy_known), "hallucination_count": sum(row.get("hallucinated") is True for row in rows),
+        "accuracy_pass": sum(row.get("accuracy") is True for row in tutor),
+        "accuracy_known": len(accuracy_known), "hallucination_count": sum(row.get("hallucinated") is True for row in tutor),
         "hallucination_known": len(hallucination_known), "levels": levels,
         "human_reviewed": sum(row.get("human_reviewed") is True for row in rows),
         "math_human_known": sum(row.get("math_correct") is not None for row in math_rows),
@@ -497,11 +546,13 @@ def write_reports(rows, questions, output_dir: Path, tag: str, *, rubric=None, p
     mean = summary["mean_latency_ms"]
     latency_text = f"{mean:.1f} ms ({summary['latency_samples']} samples)" if mean is not None else "미측정"
     bm25_text = f"{summary['bm25_pass']}/{summary['bm25_total']}" if summary["bm25_total"] else "미측정 (청크 입력 없음)"
-    accuracy = (f"{summary['accuracy_pass']}/{summary['total']} (자동 판정; 사람 검토 {summary['human_reviewed']}건)"
-                if summary["accuracy_known"] == len(rows) and rows else
-                f"미측정/미완료 (확정 {summary['accuracy_known']}/{summary['total']}, 확인된 정답 {summary['accuracy_pass']})")
-    hallucination = (f"{summary['hallucination_count']}건" if rows and summary["hallucination_known"] == len(rows) else
-                     f"미측정/미완료 (판정 {summary['hallucination_known']}/{summary['total']}, 확인된 발생 {summary['hallucination_count']}건)")
+    tutor_total = summary["tutor_total"]
+    accuracy = (f"{summary['accuracy_pass']}/{tutor_total} (자동 판정; 사람 검토 {summary['human_reviewed']}건)"
+                if tutor_total and summary["accuracy_known"] == tutor_total else
+                f"미측정/미완료 (확정 {summary['accuracy_known']}/{tutor_total}, 확인된 정답 {summary['accuracy_pass']})")
+    hallucination = (f"{summary['hallucination_count']}건" if tutor_total and summary["hallucination_known"] == tutor_total else
+                     f"미측정/미완료 (판정 {summary['hallucination_known']}/{tutor_total}, 확인된 발생 {summary['hallucination_count']}건)")
+    modes_text = "; ".join(f"{mode} {m['pass']}/{m['total']} (정상 응답 {m['ok']})" for mode, m in summary["modes"].items())
     level_text = "; ".join(f"{level}: {metrics['samples']}건/평균 {metrics['mean'] if metrics['mean'] is not None else '미측정'}"
                            for level, metrics in summary["levels"].items())
     cost_text = (f"{summary['estimated_cost']:.8f} {summary['cost_currency']} (계측 {summary['cost_samples']}/{summary['total']}, 사용자 제공 단가의 RAG 추정치)"
@@ -513,18 +564,19 @@ def write_reports(rows, questions, output_dir: Path, tag: str, *, rubric=None, p
                         if summary["judge_usage_samples"] else "미측정")
     md_path.write_text(
         f"# 평가 수집 결과: {tag}\n\n"
-        f"- 문항 수: {summary['total']}\n"
+        f"- 문항 수: {summary['total']} (tutor {summary['tutor_total']})\n"
         f"- 정상 응답: {summary['http_ok']}/{summary['total']}\n"
-        f"- 근거성: {summary['grounded_pass']}/{summary['grounded_total']} (논문·페이지 ±1)\n"
+        f"- 근거성(tutor): {summary['grounded_pass']}/{summary['grounded_total']} (논문·페이지 ±1)\n"
         f"- 예외 거절: {summary['refusal_pass']}/{summary['refusal_total']}\n"
         f"- 예외 본문 의미 검사: 통과 {summary['refusal_semantic_pass']}, 판정 {summary['refusal_semantic_known']}/{summary['refusal_total']}\n"
         f"- 수식·수치 검토 배지: {summary['review_pass']}/{summary['review_total']}\n"
         f"- 평균 서버 지연: {latency_text}\n"
         f"- BM25 근거 Hit@k: {bm25_text}\n"
         "- RAG 검색 Recall@k: 미측정 (전체 검색 결과 필요)\n"
-        f"- 정확성: {accuracy}\n"
-        f"- 환각(일반·예외, 문항 중복 합산 없음): {hallucination}\n"
-        f"- 수준 적합성(수동): {level_text} / 각 수준 최소 3건 필요\n"
+        f"- 정확성(tutor): {accuracy}\n"
+        f"- 환각(tutor 일반·예외, 문항 중복 합산 없음): {hallucination}\n"
+        f"- 요청 깊이 적합성(수동, tutor; L1 더 쉽게·L2 기본·L3 더 깊게): {level_text} / 각 깊이 최소 3건 필요\n"
+        f"- 모드별 규칙 검사(prior·topic·verify): {modes_text}\n"
         f"- 수식 사람 확인: {summary['math_human_known']}/{summary['review_total']} (정확 {summary['math_human_pass']})\n"
         f"- 판정기 오류: {summary['judge_errors']}건\n"
         f"- RAG 추정 비용: {cost_text}\n"
@@ -602,7 +654,8 @@ def main(argv=None):
                 apply_pricing(rows, pricing)
             for path in write_reports(rows, questions, args.output_dir, args.tag, rubric=rubric, pricing=pricing):
                 print(path)
-            return 1 if any(row["status"] != "ok" or row.get("accuracy") is None or row.get("hallucinated") is None for row in rows) else 0
+            return 1 if any(row["status"] != "ok" or (row["mode"] == "tutor" and (row.get("accuracy") is None or row.get("hallucinated") is None))
+                            or (row["mode"] != "tutor" and row.get("mode_pass") is None) for row in rows) else 0
         if args.judgments or args.write_review_template:
             raise ValueError("Review inputs require --review-csv")
         if not args.token or not args.token.strip():
@@ -640,7 +693,7 @@ def main(argv=None):
             apply_pricing(rows, pricing)
         for path in write_reports(rows, questions, args.output_dir, args.tag, rubric=rubric, pricing=pricing):
             print(path)
-        return 1 if any(row["status"] != "ok" or (args.judge_openai and row.get("judge_status") != "complete") for row in rows) else 0
+        return 1 if any(row["status"] != "ok" or (args.judge_openai and row["mode"] == "tutor" and row.get("judge_status") != "complete") for row in rows) else 0
     except (ValueError, OSError):
         # Validation errors originate locally, but filesystem errors can expose
         # private paths. Keep CLI diagnostics bounded to known input checks.

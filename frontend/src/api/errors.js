@@ -14,6 +14,7 @@ const MESSAGES = {
   PAYLOAD_TOO_LARGE: '파일이 너무 커요. PDF는 20MB까지 올릴 수 있어요.',
   VALIDATION_ERROR: '입력한 내용을 확인해 주세요.',
   STT_EMPTY: '음성을 알아듣지 못했어요. 다시 말해 주세요.',
+  RATE_LIMITED: '요청이 많아 잠시 쉬고 있어요. 조금 뒤에 다시 시도해 주세요.',
   NOT_READY: '서비스를 준비 중이에요. 잠시 후 다시 시도해 주세요.',
   UPSTREAM_TIMEOUT: '응답이 지연되고 있어요. 잠시 후 다시 시도해 주세요.',
   TIMEOUT: '응답이 지연되고 있어요. 잠시 후 다시 시도해 주세요.',
@@ -30,6 +31,7 @@ const CODE_BY_STATUS = {
   409: 'CONFLICT',
   413: 'PAYLOAD_TOO_LARGE',
   422: 'VALIDATION_ERROR',
+  429: 'RATE_LIMITED',
   503: 'NOT_READY',
   504: 'UPSTREAM_TIMEOUT',
 }

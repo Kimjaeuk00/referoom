@@ -6,6 +6,7 @@ from app.data.routers import batches, library, upload, zotero
 from app.rag import config_rag  # noqa: F401  (.env를 읽는다. get_settings()보다 먼저 불러와야 한다)
 from app.rag.errors import register_error_handlers
 from app.rag.router import router as rag_router
+from app.rag.router_modes import router as modes_router
 
 # JWT_SECRET이 없으면 여기서 RuntimeError로 서버가 뜨지 않는다. 발급자·알고리즘·CORS 허용 주소는 common-py 설정을 따른다.
 settings = get_settings()
@@ -22,6 +23,7 @@ app.add_middleware(
 )
 register_error_handlers(app)
 app.include_router(rag_router)
+app.include_router(modes_router)
 for data_router in (library.router, upload.router, batches.router, zotero.router):
     app.include_router(data_router)
 

@@ -8,6 +8,8 @@ defineProps({ topics: { type: Array, required: true } })
 defineEmits(['cite'])
 
 const list = (value) => (Array.isArray(value) ? value.filter(Boolean) : [])
+// 서버가 데이터셋·비교 대상·지표를 하나도 못 정했으면 "검증 실험 제안" 제목만 남지 않도록 칸 자체를 숨긴다
+const hasExperiment = (e) => !!e && ['datasets', 'baselines', 'metrics'].some((k) => list(e[k]).length)
 </script>
 
 <template>
@@ -27,7 +29,7 @@ const list = (value) => (Array.isArray(value) ? value.filter(Boolean) : [])
           <dt>접근 아이디어</dt>
           <dd>{{ t.approach }}</dd>
         </div>
-        <div v-if="t.experiment">
+        <div v-if="hasExperiment(t.experiment)">
           <dt>검증 실험 제안</dt>
           <dd>
             <span v-if="list(t.experiment.datasets).length">데이터셋 {{ list(t.experiment.datasets).join(', ') }}</span>

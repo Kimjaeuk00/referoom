@@ -1,28 +1,11 @@
 """common-py를 RAG 서비스에 붙인 결과 확인: 오류 형식, 요청 ID, 요청 로그(토큰 수), CORS, level claim 무시."""
 import json
-import logging
 
 import pytest
 
 from conftest import make_token
 
 BODY = {"question": "LoRA는 어떤 파라미터를 학습하나요?"}
-
-
-@pytest.fixture()
-def access_log():
-    """공통 요청 로그(JSON 한 줄)를 모은다. 이 로거는 전파되지 않아 caplog로는 못 받는다."""
-    records: list[dict] = []
-
-    class Collect(logging.Handler):
-        def emit(self, record):
-            records.append(json.loads(record.getMessage()))
-
-    logger = logging.getLogger("referoom_common.access")
-    handler = Collect()
-    logger.addHandler(handler)
-    yield records
-    logger.removeHandler(handler)
 
 
 def test_auth_errors_use_common_format(client):

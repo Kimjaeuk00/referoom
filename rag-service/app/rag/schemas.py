@@ -1,10 +1,14 @@
-"""/rag-query 요청·응답 스키마 (DEV_04 2절)."""
+"""/rag-query 요청·응답 스키마 (DEV_04 2절)와 v0.2 모드(주제·검증·요약)의 요청·응답.
+
+새 모드의 응답 형식은 프론트(frontend/src/api/mock/index.js, components/qa)가 읽는 필드와 같다.
+"""
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictInt, field_validator, model_serializer
 
 Level = Literal["L1", "L2", "L3"]
 View = Literal["dev", "rnd"]
+Mode = Literal["tutor", "prior"]  # /rag-query의 모드. 주제·검증은 전용 경로(/topic-suggest, /verify)를 쓴다
 
 
 class Scope(BaseModel):
@@ -21,6 +25,7 @@ class RagRequest(BaseModel):
     level: Level | None = None  # 이번 질문의 설명 깊이. '더 쉽게'=L1, '더 깊게'=L3, 생략하면 기본 깊이(L2 규칙)
     view: View | None = None
     top_k: int = Field(default=5, ge=1, le=10)
+    mode: Mode = "tutor"  # prior면 논문별 정리표(table)를 더해 답한다. 생략하면 지금까지와 같은 튜터
 
 
 class AnswerDraft(BaseModel):
@@ -28,6 +33,18 @@ class AnswerDraft(BaseModel):
     found: bool = Field(description="근거로 답할 수 있는가")
     answer: str = Field(description="[S#] 라벨을 포함한 본문")
     cited: list[str] = Field(default_factory=list, description="실제 인용한 라벨 예: ['S1','S3']")
+
+
+class PriorCell(BaseModel):
+    """선행연구 정리표의 한 칸. 근거에 없으면 value와 label 모두 null."""
+    key: Literal["problem", "method", "dataset", "metric", "result", "limitation"]
+    value: str | None = Field(default=None, description="근거에 있는 내용. 없으면 null")
+    label: str | None = Field(default=None, description="값의 근거가 된 블록의 라벨 하나. 예: S2")
+
+
+class PriorRowDraft(BaseModel):
+    """LLM 구조화 출력: 논문 한 편의 정리표 행 (칸 6개)."""
+    cells: list[PriorCell] = Field(default_factory=list)
 
 
 class SourceDetail(BaseModel):
@@ -47,4 +64,200 @@ class RagResponse(BaseModel):
     handoff: bool = False
     level: Level
     view: View
+    latency_ms: int
+    table: list[dict] | None = None  # mode=prior일 때만. 논문별 행 {paper_id, title, problem, method, dataset, metric, result, limitation, labels}
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_table(self, handler):
+        # 튜터 응답의 키 집합은 예전과 같게 유지한다(table은 값이 있을 때만 응답에 나온다)
+        data = handler(self)
+        if data.get("table") is None:
+            data.pop("table", None)
+        return data
+
+
+# ---- 주제 모드: POST /topic-suggest ----
+Perspective = Literal["limitation_fix", "combine", "extend", "efficiency", "evaluation"]
+Verdict = Literal["match", "mismatch", "condition_differs", "not_found", "own_result"]
+
+
+class LimitationItem(BaseModel):
+    """LLM 구조화 출력: 근거에서 찾은 한계 하나."""
+    summary: str = Field(description="논문이 밝힌 한계를 한 문장으로")
+    label: str = Field(description="그 한계가 나온 근거 블록의 라벨 하나. 예: S2")
+
+
+class LimitationDraft(BaseModel):
+    """LLM 구조화 출력: 논문 한 편에서 찾은 한계들. 근거에 한계가 없으면 비어 있다."""
+    items: list[LimitationItem] = Field(default_factory=list)
+
+
+class TopicDraftItem(BaseModel):
+    """LLM 구조화 출력: 주제 후보 하나."""
+    perspective: Perspective
+    title: str
+    question: str = Field(description="연구 질문 한 문장")
+    approach: str = Field(description="접근 아이디어 한두 문장")
+    datasets: list[str] = Field(default_factory=list)
+    baselines: list[str] = Field(default_factory=list)
+    metrics: list[str] = Field(default_factory=list)
+    based_on: list[str] = Field(default_factory=list, description="근거가 된 한계의 라벨들. 목록에 있는 라벨만")
+
+
+class TopicDraft(BaseModel):
+    topics: list[TopicDraftItem] = Field(default_factory=list)
+
+
+class TopicRequest(BaseModel):
+    paper_ids: list[StrictInt] = Field(min_length=1, max_length=10)  # 대상 논문 1~10편 (MAX_COLLECT와 같다)
+    hint: str = Field(default="", max_length=1000)  # 원하는 방향(비워도 된다)
+    n: int = Field(default=4, ge=1, le=4)
+    view: View | None = None
+
+
+class Limitation(BaseModel):
+    label: str
+    paper_id: int | None = None
+    title: str
+    page: int | None = None
+    summary: str
+
+
+class Experiment(BaseModel):
+    datasets: list[str] = Field(default_factory=list)
+    baselines: list[str] = Field(default_factory=list)
+    metrics: list[str] = Field(default_factory=list)
+
+
+class SimilarPaper(BaseModel):
+    paper_id: int
+    title: str
+    score: float
+
+
+class TopicCandidate(BaseModel):
+    perspective: Perspective
+    title: str
+    question: str
+    approach: str
+    experiment: Experiment = Field(default_factory=Experiment)
+    based_on: list[str] = Field(default_factory=list)  # 근거가 된 한계의 라벨
+    similar_papers: list[SimilarPaper] = Field(default_factory=list)
+    ai_generated: bool = True
+
+
+class TopicResponse(BaseModel):
+    limitations: list[Limitation] = Field(default_factory=list)
+    topics: list[TopicCandidate] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+    source_details: list[SourceDetail] = Field(default_factory=list)
+    needs_review: bool = True  # 후보는 항상 사람이 검토한다
+    handoff: bool = False
+    view: View
+    latency_ms: int
+
+
+# ---- 검증 모드: POST /verify ----
+class ExtractedClaim(BaseModel):
+    """LLM 구조화 출력: 원고에서 뽑은 수치 주장 하나."""
+    sentence: str = Field(description="주장이 들어 있는 원고 문장(핵심 부분)")
+    subject: str | None = Field(default=None, description="값의 대상이 되는 방법·모델 이름")
+    metric: str | None = Field(default=None, description="지표나 항목 이름")
+    claimed_value: str | None = Field(default=None, description="원고가 말한 값. 숫자와 단위를 원고 표기 그대로")
+    dataset: str | None = Field(default=None, description="데이터셋이나 실험 조건(모델 크기 등). 없으면 null")
+    own_result: bool = Field(default=False, description="문장이 저자 본인의 새 결과임을 분명히 밝힐 때만 true(본 연구·우리·제안한 방법). 그렇지 않으면 false")
+    search_text: str | None = Field(default=None, description="이 값을 영어 논문에서 찾을 때 쓸 영어 검색 문구: 대상, 지표, 데이터셋, 값을 영어로")
+
+
+class ClaimExtraction(BaseModel):
+    claims: list[ExtractedClaim] = Field(default_factory=list)
+
+
+class EvidenceRead(BaseModel):
+    """LLM 구조화 출력: 근거에서 읽은 비교 값. 근거에 없으면 found_value와 label을 null로 둔다."""
+    found_value: str | None = Field(default=None, description="근거에 적힌 값. 숫자와 단위를 근거 표기 그대로")
+    found_subject: str | None = Field(default=None, description="그 값이 어느 방법·모델의 것인지")
+    found_dataset: str | None = Field(default=None, description="그 값이 보고된 데이터셋")
+    condition: str | None = Field(default=None, description="그 값이 보고된 조건(모델 크기·설정 등)을 한 문장으로")
+    same_conditions: Literal["yes", "no", "unknown"] = Field(default="unknown", description="주장의 대상·지표·데이터셋·모델 크기가 근거와 같으면 yes, 다르면 no, 알 수 없으면 unknown")
+    label: str | None = Field(default=None, description="값이 나온 근거 블록의 라벨 하나")
+
+
+class VerifyRequest(BaseModel):
+    text: str = Field(max_length=3000)  # 원고. 로그·예외·색인에 남기지 않는다
+    paper_ids: list[StrictInt] | None = Field(default=None, max_length=50)  # 없으면 팀 전체
+    view: View | None = None
+
+    @field_validator("text")
+    @classmethod
+    def _at_least_ten_chars(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError("too short")  # 메시지에 입력을 담지 않는다
+        return value
+
+
+class Delta(BaseModel):
+    vs: str | None = None
+    value: float
+
+
+class Claim(BaseModel):
+    sentence: str
+    subject: str | None = None
+    metric: str | None = None
+    claimed_value: str | None = None
+    dataset: str | None = None
+    found_value: str | None = None
+    condition: str | None = None
+    verdict: Verdict = "not_found"
+    labels: list[str] = Field(default_factory=list)
+    delta: Delta | None = None
+
+
+class VerifyResponse(BaseModel):
+    claims: list[Claim] = Field(default_factory=list)
+    draft: str = ""
+    warnings: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+    source_details: list[SourceDetail] = Field(default_factory=list)
+    needs_review: bool = True  # 수치를 다루므로 항상 검토한다
+    handoff: bool = False
+    view: View
+    latency_ms: int
+
+
+# ---- 논문 요약: POST /summary ----
+SummaryKey = Literal["problem", "idea", "method", "result", "limit", "check"]
+
+
+class SummarySectionDraft(BaseModel):
+    """LLM 구조화 출력: 요약 섹션 하나. 근거에 없으면 text와 labels를 비운다."""
+    key: SummaryKey
+    text: str | None = Field(default=None, description="근거에 있는 내용만으로 쓴 섹션 본문. 근거에 없으면 null")
+    labels: list[str] = Field(default_factory=list, description="본문의 근거가 된 블록의 라벨들. 예: [S1, S3]")
+
+
+class SummaryDraft(BaseModel):
+    sections: list[SummarySectionDraft] = Field(default_factory=list)
+
+
+class SummaryRequest(BaseModel):
+    paper_id: StrictInt
+    view: View | None = None
+
+
+class SummarySection(BaseModel):
+    key: str
+    title: str
+    text: str
+    sources: list[str] = Field(default_factory=list)  # '제목 p.4' 문자열
+
+
+class SummaryResponse(BaseModel):
+    paper_id: int
+    title: str
+    view: View
+    sections: list[SummarySection] = Field(default_factory=list)
+    needs_review: bool = True
     latency_ms: int

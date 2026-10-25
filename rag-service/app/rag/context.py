@@ -1,5 +1,8 @@
-"""검색 결과(Hit) → [S#] 라벨 컨텍스트 (DEV_04 3.3절)."""
+"""검색 결과(Hit) → [S#] 라벨 컨텍스트 (DEV_04 3.3절)와, 모드가 함께 쓰는 출처 변환·인용 검증."""
+import re
 from dataclasses import dataclass, field
+
+from app.rag.schemas import SourceDetail
 
 MAX_CONTEXT_CHARS = 12000
 
@@ -59,3 +62,46 @@ def render_context(blocks: list[Block]) -> str:
         note = " (팀원 주석)" if b.type == "annotation" else ""
         parts.append(f"[{b.label}] 《{b.title}》{page}{note}\n{b.text}")
     return "\n\n".join(parts)
+
+
+LABEL_RE = re.compile(r"\[(S\d+)\]")
+
+
+def details_of(blocks: list[Block]) -> list[SourceDetail]:
+    """응답의 source_details. 블록마다 라벨·논문·쪽·원문 앞 200자."""
+    return [
+        SourceDetail(label=b.label, paper_id=b.paper_id, title=b.title, page=b.page, url=b.url, snippet=b.text[:200])
+        for b in blocks
+    ]
+
+
+def source_strings(blocks: list[Block]) -> list[str]:
+    """응답의 sources. '제목 p.쪽' 문자열을 중복 없이."""
+    seen: list[str] = []
+    for b in blocks:
+        s = f"{b.title} p.{b.page}" if b.page is not None else b.title
+        if s not in seen:
+            seen.append(s)
+    return seen
+
+
+def verify_citations(answer: str, cited: list[str], blocks: list[Block]) -> tuple[list[Block], bool]:
+    """인용 검증. 반환: (출처로 쓸 블록, 인용 검증 실패 여부).
+
+    - 존재하지 않는 라벨을 인용했거나 본문에 라벨이 하나도 없으면 실패
+    - 검증된 라벨이 0개이면 컨텍스트 블록 전체를 출처로 돌려준다 (출처가 비지 않도록)
+    """
+    valid = {b.label for b in blocks}
+    in_answer = set(LABEL_RE.findall(answer))
+    failed = (not in_answer) or any(c not in valid for c in cited) or any(l not in valid for l in in_answer)
+    ok = [c for c in dict.fromkeys(cited) if c in valid]
+    used = [b for b in blocks if b.label in ok] or blocks
+    return used, failed
+
+
+_GROUP_RE = re.compile(r"\[(S\d+(?:\s*[,，]\s*S\d+)+)\]")
+
+
+def split_label_groups(text: str) -> str:
+    """'[S1, S2]' 같은 묶음 인용을 '[S1] [S2]'로 바꾼다. 화면의 근거 칩과 인용 검증은 대괄호 하나에 라벨 하나만 알아본다."""
+    return _GROUP_RE.sub(lambda m: " ".join(f"[{label.strip()}]" for label in re.split(r"[,，]", m.group(1))), text)

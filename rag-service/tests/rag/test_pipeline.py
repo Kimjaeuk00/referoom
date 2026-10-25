@@ -299,3 +299,11 @@ def test_pdf_path_prefers_store_contract(monkeypatch):
 
     monkeypatch.setattr(deps.store, "pdf_path", lambda team_id, paper_id: f"/pdf/{team_id}/{paper_id}.pdf", raising=False)
     assert page_images._pdf_path(3, 7) == "/pdf/3/7.pdf"  # 저장소가 팀별 경로를 주면 로컬 시드를 보지 않는다
+
+
+def test_grouped_citations_are_split_so_the_chips_work(fake_llm, set_hits):
+    set_hits(hit(page=1), hit(page=2))
+    fake_llm.state["draft"] = AnswerDraft(found=True, answer="두 근거가 같은 말을 한다 [S1, S2].", cited=["S1", "S2"])
+    r = run()
+    assert r.answer == "두 근거가 같은 말을 한다 [S1] [S2]."
+    assert {d.label for d in r.source_details} == {"S1", "S2"}  # 묶음 표기여도 인용 검증이 두 라벨을 모두 확인한다
