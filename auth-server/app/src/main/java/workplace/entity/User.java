@@ -9,7 +9,6 @@ import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import workplace.enums.Role;
-import workplace.enums.SkillLevel;
 import workplace.enums.ViewType;
 
 @Entity
@@ -65,15 +64,6 @@ public class User {
     )
     private Role role = Role.member;
 
-    @Builder.Default
-    @Enumerated(EnumType.STRING)
-    @Column(
-        name = "skill_level",
-        nullable = false,
-        columnDefinition = "ENUM('L1','L2','L3') DEFAULT 'L2'"
-    )
-    private SkillLevel skillLevel = SkillLevel.L2;
-
     @Enumerated(EnumType.STRING)
     @Column(
         name = "view_pref",
@@ -105,14 +95,7 @@ public class User {
         this.role = Role.member;
     }
 
-    public void updateProfile(
-        SkillLevel skillLevel,
-        ViewType viewPref
-    ) {
-        if (skillLevel != null) {
-            this.skillLevel = skillLevel;
-        }
-
+    public void updateProfile(ViewType viewPref) {
         if (viewPref != null) {
             this.viewPref = viewPref;
         }

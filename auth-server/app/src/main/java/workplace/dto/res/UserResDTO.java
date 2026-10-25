@@ -3,7 +3,6 @@ package workplace.dto.res;
 import lombok.Builder;
 import lombok.Getter;
 import workplace.enums.Role;
-import workplace.enums.SkillLevel;
 import workplace.enums.TeamType;
 import workplace.enums.ViewType;
 
@@ -15,7 +14,6 @@ public class UserResDTO {
     private final String username;
     private final String displayName;
     private final Role role;
-    private final SkillLevel level;
     private final ViewType view;
     private final TeamInfo team;
 

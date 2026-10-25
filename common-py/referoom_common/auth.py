@@ -29,7 +29,6 @@ class CurrentUser:
     role: str
     team_id: int | None
     team_type: str | None
-    level: str
     view: str
 
     @property
@@ -63,6 +62,7 @@ def _positive_integer(value: Any) -> int:
 def _to_current_user(
     claims: dict[str, Any],
 ) -> CurrentUser:
+    # v0.2: 사용자 수준(level)은 더 이상 쓰지 않는다. 예전 토큰에 level claim이 있어도 읽지 않고 무시한다.
     subject = _required_string(claims, "sub")
 
     if re.fullmatch(r"[0-9]{1,19}", subject) is None:
@@ -71,14 +71,10 @@ def _to_current_user(
     user_id = _positive_integer(int(subject))
     username = _required_string(claims, "username")
     role = _required_string(claims, "role")
-    level = _required_string(claims, "level")
     view = _required_string(claims, "view")
 
     if role not in {"member", "team_admin"}:
         raise ValueError("Invalid role")
-
-    if level not in {"L1", "L2", "L3"}:
-        raise ValueError("Invalid level")
 
     if view not in {"dev", "rnd"}:
         raise ValueError("Invalid view")
@@ -112,7 +108,6 @@ def _to_current_user(
         role=role,
         team_id=team_id,
         team_type=team_type,
-        level=level,
         view=view,
     )
 
@@ -172,7 +167,6 @@ def verify_token(
                     "sub",
                     "username",
                     "role",
-                    "level",
                     "view",
                     "iat",
                     "exp",

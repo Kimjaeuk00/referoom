@@ -15,7 +15,6 @@ import workplace.entity.Team;
 import workplace.entity.User;
 import workplace.enums.ErrorCode;
 import workplace.enums.Role;
-import workplace.enums.SkillLevel;
 import workplace.enums.TeamType;
 import workplace.enums.ViewType;
 import workplace.exception.ApiException;
@@ -40,7 +39,6 @@ public class JwtTokenProvider {
             .withClaimPresence("role")
             .withClaimPresence("team_id")
             .withClaimPresence("team_type")
-            .withClaimPresence("level")
             .withClaimPresence("view")
             .withClaimPresence("iat")
             .withClaimPresence("exp")
@@ -58,7 +56,6 @@ public class JwtTokenProvider {
             .withSubject(user.getId().toString())
             .withClaim("username", user.getUsername())
             .withClaim("role", user.getRole().name())
-            .withClaim("level", user.getSkillLevel().name())
             .withClaim("view", user.getEffectiveView().name())
             .withIssuedAt(issuedAt)
             .withExpiresAt(expiresAt);
@@ -95,10 +92,6 @@ public class JwtTokenProvider {
 
             Role role = Role.valueOf(
                 readRequiredString(jwt, "role")
-            );
-
-            SkillLevel level = SkillLevel.valueOf(
-                readRequiredString(jwt, "level")
             );
 
             ViewType view = ViewType.valueOf(
@@ -140,7 +133,6 @@ public class JwtTokenProvider {
                 role,
                 teamId,
                 teamType,
-                level,
                 view
             );
         } catch (TokenExpiredException exception) {

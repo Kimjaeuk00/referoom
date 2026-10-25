@@ -25,8 +25,24 @@ def test_bearer_user_and_voice_id_alias(client, make_token):
     assert response.json() == {
         'user_id': 101, 'id': '101', 'username': 'test-member',
         'role': 'member', 'team_id': 7, 'team_type': 'dev',
-        'level': 'L2', 'view': 'dev',
+        'view': 'dev',
     }
+
+
+@pytest.mark.parametrize('legacy', ['L1', 'L2', 'L4', None, 7])
+def test_legacy_level_claim_is_ignored(client, make_token, legacy):
+    # v0.2: level은 더 이상 필수도 검증 대상도 아니다. 예전 토큰에 어떤 값이 있어도 통과하고 사용자에게 노출되지 않는다.
+    response = client.get('/me', headers=bearer(make_token({'level': legacy})))
+    assert response.status_code == 200
+    assert 'level' not in response.json()
+
+
+def test_current_user_has_no_level():
+    from dataclasses import fields
+
+    from referoom_common import CurrentUser
+
+    assert 'level' not in {f.name for f in fields(CurrentUser)}
 
 
 def test_cookie_fallback(client, make_token):
@@ -90,7 +106,7 @@ def test_invalid_jwt(client, make_token, kind):
 
 @pytest.mark.parametrize('name', [
     'iss', 'sub', 'username', 'role', 'team_id', 'team_type',
-    'level', 'view', 'iat', 'exp',
+    'view', 'iat', 'exp',
 ])
 def test_missing_claim(client, make_token, name):
     assert_error(client.get('/me', headers=bearer(make_token(omit=[name]))),
@@ -100,7 +116,7 @@ def test_missing_claim(client, make_token, name):
 @pytest.mark.parametrize('changes', [
     {'sub': '0'}, {'sub': '-1'}, {'sub': 'abc'}, {'sub': 101},
     {'sub': str(1 << 63)}, {'username': ' '}, {'username': None},
-    {'role': 'admin'}, {'level': 'L4'}, {'view': 'all'},
+    {'role': 'admin'}, {'view': 'all'},
     {'team_id': True}, {'team_id': 0}, {'team_id': -1},
     {'team_id': '7'}, {'team_id': 1 << 63}, {'team_type': 'other'},
     {'team_id': None}, {'team_type': None},

@@ -126,15 +126,17 @@ mariadb --host="$DB_HOST" --port="$DB_PORT" --user="$DB_USER" \
 
 시드가 필요한 개발 DB에서만 같은 방식으로 `900_dev_seed.sql`을 별도 적용한다. 001·002는 재실행용 `IF NOT EXISTS` 스크립트가 아니다. **2026-10-24 별도 임시 MariaDB 11.4의 새 DB에서 `001 → 002 → 900` 적용과 JPA `validate` 기동 검증을 완료했다.** 2팀·5계정 생성, `users.team_id` 외래키 및 시드 재실행 시 중복 생성·기존 행 변경이 없음을 확인했다.
 
-시드 파일은 **개발팀·R&D팀 각각 관리자와 팀원 1명씩, 미가입 계정 1명을 포함한 2팀·5계정**으로 구성한다. 공통 비밀번호 `Demo-pass-1234!`, 개발팀 초대 코드 `RFDEV234`, R&D팀 초대 코드 `RFRND234`는 공개된 개발용 값이며 실제 서비스 자격 증명이 아니다. 별도 새 DB에서 아래 5계정 모두 로그인 200과 역할·소속·수준·기본 관점·JWT claim을 확인했다. 검증용 DB·인증 컨테이너·네트워크는 정리했으며 기존 DB에는 초기화 SQL을 실행하지 않았다.
+시드 파일은 **개발팀·R&D팀 각각 관리자와 팀원 1명씩, 미가입 계정 1명을 포함한 2팀·5계정**으로 구성한다. 공통 비밀번호 `Demo-pass-1234!`, 개발팀 초대 코드 `RFDEV234`, R&D팀 초대 코드 `RFRND234`는 공개된 개발용 값이며 실제 서비스 자격 증명이 아니다. 별도 새 DB에서 아래 5계정 모두 로그인 200과 역할·소속·기본 관점·JWT claim을 확인했다. 검증용 DB·인증 컨테이너·네트워크는 정리했으며 기존 DB에는 초기화 SQL을 실행하지 않았다.
 
-| 계정 | 역할 | 소속 | 수준 |
-|---|---|---|---|
-| `demo_admin` | `team_admin` | 개발 데모팀(`dev`) | `L2` |
-| `demo_member` | `member` | 같은 개발 데모팀 | `L1` |
-| `demo_rnd_admin` | `team_admin` | R&D 데모팀(`rnd`) | `L3` |
-| `demo_rnd_member` | `member` | 같은 R&D 데모팀 | `L2` |
-| `demo_solo` | `member` | 없음 | `L2` |
+| 계정 | 역할 | 소속 |
+|---|---|---|
+| `demo_admin` | `team_admin` | 개발 데모팀(`dev`) |
+| `demo_member` | `member` | 같은 개발 데모팀 |
+| `demo_rnd_admin` | `team_admin` | R&D 데모팀(`rnd`) |
+| `demo_rnd_member` | `member` | 같은 R&D 데모팀 |
+| `demo_solo` | `member` | 없음 |
+
+v0.2에서 사용자 수준(`skill_level`)을 없앴다. 시드·스키마·JWT 어디에도 `level`이 없고, 2026-10-25 수정한 SQL을 새 DB에 적용해 JPA `validate` 기동과 시드 계정 로그인을 다시 확인했다.
 
 기존 아이디·코드는 덮어쓰지 않으며 ID는 자동 생성된다. 초대 코드 재발급 후 시드를 재실행하면 고정 코드의 팀이 추가될 수 있으므로 반복 초기화 용도로 사용하지 않는다.
 
@@ -160,7 +162,7 @@ JSON 요청은 `Content-Type: application/json`을 사용한다. 가입·로그�
 | `GET /api/auth/check` | Bearer 또는 헤더 없을 때 쿠키 | 200 | `ok`, `via:"jwt"`, `username`, `sub` |
 | `GET /api/health` | 공개 | 200 | `ok:true`, `db:"up"` |
 
-`GET /api/team`은 `{"team":{...}}`, `GET /api/me`는 `{"user":{...}}`로 감싼다. `user`에는 `id/username/displayName/role/level/view/team`이 있고 미가입이면 `team:null`이다. 팀원 목록의 공개 필드는 `id/username/displayName/role/level/view`다.
+`GET /api/team`은 `{"team":{...}}`, `GET /api/me`는 `{"user":{...}}`로 감싼다. `user`에는 `id/username/displayName/role/view/team`이 있고 미가입이면 `team:null`이다. 팀원 목록의 공개 필드는 `id/username/displayName/role/view`다.
 
 **회원가입 예시: 아래 값은 설명·테스트용이며 실행하면 DB에 계정을 생성한다.** 같은 아이디로 반복 가입하면 409다.
 
@@ -169,7 +171,6 @@ JSON 요청은 `Content-Type: application/json`을 사용한다. 가입·로그�
   "username": "readme_admin",
   "password": "Example-pass-1234!",
   "displayName": "테스트 관리자",
-  "level": "L2",
   "teamMode": "create",
   "teamName": "레퍼룸 테스트팀",
   "teamType": "dev"
@@ -178,7 +179,6 @@ JSON 요청은 `Content-Type: application/json`을 사용한다. 가입·로그�
 
 - `username`: trim 후 4~50자, 중복 불가.
 - `password`: 8자 이상이며 UTF-8 72바이트 이하. BCrypt cost 12로 저장.
-- `level`: 생략 시 `L2`, 허용값 `L1/L2/L3`.
 - `teamMode:"create"`: `teamName`, `teamType(dev/rnd)` 필요. 가입자는 `team_admin`.
 - `teamMode:"join"`: 실제 `teamCode` 필요. 가입자는 `member`.
 - `teamMode` 생략: 팀 없이 `member`로 가입. 가입 응답은 로그인 토큰을 발급하지 않으므로 이어서 로그인한다.
@@ -190,10 +190,10 @@ JSON 요청은 `Content-Type: application/json`을 사용한다. 가입·로그�
 ```
 
 ```json
-{"level":"L3","view":"rnd"}
+{"view":"rnd"}
 ```
 
-프로필의 두 필드는 각각 선택이지만 하나 이상은 있어야 한다. 현재 PATCH는 `displayName`을 수정하지 않는다. 수준·관점 변경은 팀이나 권한을 바꾸지 않는다.
+프로필은 `view`(`dev`/`rnd`)만 바꾸며 `view`가 없으면 422다. 현재 PATCH는 `displayName`을 수정하지 않는다. 관점 변경은 팀이나 권한을 바꾸지 않는다.
 
 팀 참여 요청은 `{"teamCode":"발급받은 실제 코드"}`이며 코드는 주변 공백 제거·대문자 정규화를 거친다. 한 사용자는 한 팀에만 가입한다. 초대 코드는 8자 영숫자로 생성되며, 재발급 후 이전 코드로 새로 참여할 수 없고 기존 팀원 소속은 유지된다.
 
@@ -215,8 +215,8 @@ Java는 `{"ok":false,"error":"사용자 안내","code":"UNAUTHORIZED"}`, Python�
 
 **토큰·쿠키·프론트 연결**
 
-- JWT claim은 `iss/sub/username/role/team_id/team_type/level/view/iat/exp`다. `sub`는 문자열 사용자 ID, `team_id`는 정수 또는 null이다. 미가입은 `team_id/team_type` 둘 다 null이며 키를 생략하지 않는다.
-- role은 `member/team_admin`, team_type과 view는 `dev/rnd`, level은 `L1/L2/L3`다. 기본 view는 개인 선택 → 팀 유형 → `dev` 순서다.
+- JWT claim은 `iss/sub/username/role/team_id/team_type/view/iat/exp`다. `sub`는 문자열 사용자 ID, `team_id`는 정수 또는 null이다. 미가입은 `team_id/team_type` 둘 다 null이며 키를 생략하지 않는다.
+- role은 `member/team_admin`, team_type과 view는 `dev/rnd`다. 기본 view는 개인 선택 → 팀 유형 → `dev` 순서다.
 - 로그인은 JSON 토큰과 `ACCESS_TOKEN` HttpOnly·SameSite=Lax·Path=/ 쿠키를 발급한다. Secure는 서버가 인식한 HTTPS 요청 여부에 따른다.
 - 현재 Java의 쿠키 대체 인증은 **GET `/api/auth/check`에만** 허용한다. `/api/me`, `/api/team` 등은 Bearer가 필요하다. Python common-py는 적용한 보호 경로에서 헤더가 없으면 쿠키를 사용한다.
 - Authorization 헤더가 있으면 그 값을 검증하고 잘못된 헤더를 정상 쿠키로 우회하지 않는다.
@@ -290,7 +290,7 @@ def ensure_ready(ready: bool):
 - `verify_token`: 로그인 확인. 팀 미가입도 통과.
 - `require_team`: 로그인·팀 가입 확인. 미가입은 `403 NO_TEAM`.
 - `require_admin`: 팀 관리자 확인. 일반 팀원은 `403 FORBIDDEN`.
-- `CurrentUser`는 읽기 전용 dataclass다. `user.user_id`는 int, `user.id`는 문자열 별칭이며 `username/role/team_id/team_type/level/view`를 제공한다. dict 인덱싱 대신 속성을 사용한다.
+- `CurrentUser`는 읽기 전용 dataclass다. `user.user_id`는 int, `user.id`는 문자열 별칭이며 `username/role/team_id/team_type/view`를 제공한다. dict 인덱싱 대신 속성을 사용한다.
 - 검색·자료 접근 범위는 검증한 `user.team_id`로 제한한다. 의존성만 등록해도 검색 저장소 필터가 자동 적용되는 것은 아니다.
 - 기존 RAG의 자체 `ApiError`와 공통 `ApiError`를 섞지 않는다. 발생 지점·처리기를 공통 클래스로 통일해야 한다. 스텁 인증·검색 성공은 실제 통합 성공과 구분한다.
 - 음성 담당자는 기존 `create_stt_router(require_team)`, `create_tts_router(require_team)`, `create_audio_router(require_team)` 팩토리를 등록할 수 있다. `/voice-qa`와 RAG 호출은 별도 구현이며 CurrentUser에는 토큰 원문이 없다.
@@ -372,7 +372,7 @@ python -m pytest -q common-py/tests
 
 1. `/api/health`의 200·`db:up`을 확인한다.
 2. 팀 생성 가입 → 로그인 → `bearerAuth`에 토큰 입력 → `/api/me`, `/api/team`을 확인한다.
-3. 프로필 PATCH 후 새 토큰으로 인증을 교체하고 수준·관점을 확인한다.
+3. 프로필 PATCH 후 새 토큰으로 인증을 교체하고 관점을 확인한다.
 4. 실제 초대 코드로 일반 팀원 가입과 기존 미가입 계정의 `/api/team/join`을 각각 확인한다.
 5. 관리자 팀원 목록·코드 재발급 200, 일반 팀원 403, 미가입 팀 조회 403을 확인한다.
 6. 재발급 후 이전 코드 404, 새 코드 참여 성공, 기존 팀원 소속 유지를 확인한다.

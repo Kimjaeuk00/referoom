@@ -15,7 +15,7 @@ const profile = useProfileStore()
 const router = useRouter()
 
 // 프로필: 저장하면 응답의 새 토큰으로 바꿔야 AI 서비스에 반영된다(DEV_02 4.5).
-// PATCH /api/me/profile에는 view만 보낸다(level은 서버에 남아 있지만 v0.2에서는 화면에서 다루지 않는다). 표시 이름은 가입할 때 정한 값을 보여 주기만 한다.
+// PATCH /api/me/profile에는 view만 보낸다(v0.2에서 사용자 수준(level)은 서버에도 없다). 표시 이름은 가입할 때 정한 값을 보여 주기만 한다.
 const form = reactive({ view: profile.view })
 const saving = ref(false)
 const profileError = ref('')
