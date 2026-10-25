@@ -15,19 +15,12 @@ def _optional_int(name: str) -> int | None:
     return int(value) if value.isdecimal() and int(value) > 0 else None
 
 
-JWT_SECRET = os.getenv("JWT_SECRET")
-JWT_ISSUER = "simple-auth-server"
+# JWT_SECRET·발급자·CORS 허용 주소는 common-py(referoom_common.get_settings)가 환경변수에서 읽는다. 여기에 두지 않는다.
 
 # 근거 판정 임계값 (DEV_04 3.2절). 임베딩 모델마다 점수 분포가 다르므로 모델을 바꾸면 다시 보정한다.
 # bge-m3/1000자, 질문 30개: 정상 1위 점수 0.570~0.756, 예외 0.446~0.601 (DoRA만 0.601로 겹침 → LLM found=false가 처리)
 MIN_SCORE = float(os.getenv("MIN_SCORE", "0.55"))
 REVIEW_SCORE = float(os.getenv("REVIEW_SCORE", "0.60"))  # 정상 질문 중 하위 3/24가 검수 대상
-
-CORS_ALLOWED_ORIGINS = [
-    o.strip()
-    for o in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5174,http://localhost:8008").split(",")
-    if o.strip()
-]
 
 LLM_API_KEY = os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL")

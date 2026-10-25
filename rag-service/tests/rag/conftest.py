@@ -4,26 +4,31 @@ import time
 from pathlib import Path
 
 # 앱 import 전에 설정해야 한다
-os.environ["JWT_SECRET"] = "test-secret"
+os.environ["JWT_SECRET"] = "test-secret-0123456789-abcdefghijklmnop"
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import pytest
 from fastapi.testclient import TestClient
-from jose import jwt
+import jwt  # PyJWT (common-py와 같은 라이브러리)
 
 
 def make_token(**overrides) -> str:
+    """인증서버가 발급하는 claim 집합(v0.2: level 없음). 값이 None인 claim은 빼되, 팀 미가입은 team_id·team_type이 둘 다 null로 들어간다."""
     claims = {
         "iss": "simple-auth-server",
         "sub": "12",
+        "username": "tester",
+        "role": "member",
         "team_id": 3,
-        "level": "L1",
+        "team_type": "dev",
         "view": "rnd",
         "iat": int(time.time()),
         "exp": int(time.time()) + 3600,
     }
     claims.update(overrides)
-    return jwt.encode({k: v for k, v in claims.items() if v is not None}, "test-secret", algorithm="HS256")
+    if claims["team_id"] is None and "team_type" not in overrides:
+        claims["team_type"] = None
+    return jwt.encode({k: v for k, v in claims.items() if v is not None or k in ("team_id", "team_type")}, "test-secret-0123456789-abcdefghijklmnop", algorithm="HS256")
 
 
 @pytest.fixture(autouse=True)

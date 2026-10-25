@@ -1,6 +1,6 @@
 """검색→답변 파이프라인 (DEV_04 3절).
 
-요청 → level/view 결정 → store.search → MIN_SCORE 필터
+요청 → 깊이(level)/view 결정 → store.search → MIN_SCORE 필터
   → 0건: 근거 없음(LLM 미호출)
   → 있음: 컨텍스트 → 프롬프트 → LLM 구조화 출력 → 인용 검증 → needs_review → 응답
 """
@@ -121,7 +121,8 @@ def _image_retry(system: str, user_msg: str, team_id: int, target: list[Block]):
 
 def run(req: RagRequest, user: CurrentUser, usage: dict | None = None) -> RagResponse:
     started = time.monotonic()
-    level = req.level or user.level or "L2"
+    # v0.2: 사용자 수준 설정은 없다. level은 '더 쉽게/더 깊게' 요청이 body로 보낼 때만 오고(L1/L3), 없으면 기본 깊이(L2 규칙)다.
+    level = req.level or "L2"
     view = req.view or user.view or "dev"
 
     # team_id는 JWT에서만 읽는다 (요청 본문 값 무시)

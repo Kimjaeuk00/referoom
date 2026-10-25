@@ -9,7 +9,7 @@ from app.rag.errors import ApiError
 from app.rag.schemas import AnswerDraft, RagRequest
 from app.rag.store_stub import Hit
 
-USER = CurrentUser(user_id=12, team_id=3, role="member", level="L2", view="dev")
+USER = CurrentUser(user_id=12, username="tester", role="member", team_id=3, team_type="dev", view="dev")
 REQ = RagRequest(question="LoRA는 어떤 파라미터를 학습하나요?")
 TITLE = "LoRA: Low-Rank Adaptation of Large Language Models"
 REAL_GENERATE = llm.generate  # conftest의 autouse 가짜로 바뀌기 전의 원본 (수집 시점에 캡처)

@@ -37,9 +37,10 @@ def test_ok_matches_schema(client, auth):
     assert data["handoff"] is False
 
 
-def test_level_view_default_from_jwt_and_override(client, auth):
+def test_level_default_is_standard_depth_and_view_from_jwt(client, auth):
+    # v0.2: JWT에는 level이 없다. 요청이 level을 보내지 않으면 기본 깊이(L2)이고 view는 JWT 값을 따른다.
     d = client.post("/rag-query", json=BODY, headers=auth).json()
-    assert (d["level"], d["view"]) == ("L1", "rnd")
+    assert (d["level"], d["view"]) == ("L2", "rnd")
     d = client.post("/rag-query", json={**BODY, "level": "L3", "view": "dev"}, headers=auth).json()
     assert (d["level"], d["view"]) == ("L3", "dev")
 
