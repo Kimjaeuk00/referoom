@@ -27,6 +27,10 @@ _details = details_of  # 예전 이름 (모드 모듈은 context의 공용 이�
 _source_strings = source_strings
 _LABEL_RE = LABEL_RE
 _MATH_RE = re.compile(r"\$|%|\d+\.\d+")
+# 단위가 붙은 수량(780GB, 175B, 10,000배)과 천 단위 쉼표가 있는 큰 수. 정수만 있는 수치 답이 검토 배지를 못 받던 문제를 막는다.
+# "32 배치"의 배, "2 초기화"의 초 같은 일반 단어는 잡지 않으려고 배(?!치)로 두고 시간 단위는 넣지 않았다.
+# 실제 색인으로 답할 수 있는 18문항을 돌려 보니 기존 규칙은 11개, 이 규칙을 더하면 14개가 표시됐다(R08 780GB→48GB 포함).
+_QUANTITY_RE = re.compile(r"\d[\d,]*\s*(?:GB|MB|TB|KB|bit|비트|배(?!치)|B\b|M\b|K\b|×)|\d{1,3}(?:,\d{3})+")
 # 이미지 재시도 조건: 답변에 백분율·소수·수식 기호·두 자리 이상 숫자가 있음
 _VALUE_RE = re.compile(r"\d+(\.\d+)?\s*%|\d+\.\d+|\$|\d{2,}")
 
@@ -40,6 +44,7 @@ def needs_review(answer: str, used: list[Block], citation_failed: bool, top_scor
     return (
         any(b.has_math for b in used)
         or bool(_MATH_RE.search(answer))
+        or bool(_QUANTITY_RE.search(answer))
         or citation_failed
         or top_score < config_rag.REVIEW_SCORE
         or all(b.type == "annotation" for b in used)

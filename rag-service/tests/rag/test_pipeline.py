@@ -95,6 +95,28 @@ def test_math_or_number_in_answer(fake_llm, set_hits, answer):
     assert run().needs_review is True
 
 
+@pytest.mark.parametrize("answer", [
+    "65B 모델의 메모리를 780GB 이상에서 48GB 미만으로 줄입니다 [S1]",  # 정수로만 된 수치 답(R08)
+    "학습 파라미터를 10,000배 줄입니다 [S1]",
+    "모델은 900,330,000개 파라미터를 가집니다 [S1]",
+])
+def test_integer_quantities_get_the_review_badge(fake_llm, set_hits, answer):
+    set_hits(hit())
+    fake_llm.state["draft"] = AnswerDraft(found=True, answer=answer, cited=["S1"])
+    assert run().needs_review is True
+
+
+@pytest.mark.parametrize("answer", [
+    "랭크 r은 보통 1에서 8 사이로 둡니다 [S1]",  # 단위 없는 작은 수
+    "한 번에 32 배치씩 학습합니다 [S1]",  # 배치는 배수가 아니다
+    "이 논문은 2021년에 발표되었습니다 [S1]",
+])
+def test_plain_small_numbers_do_not_get_the_badge(fake_llm, set_hits, answer):
+    set_hits(hit())
+    fake_llm.state["draft"] = AnswerDraft(found=True, answer=answer, cited=["S1"])
+    assert run().needs_review is False
+
+
 def test_has_math_chunk(set_hits):
     set_hits(hit(has_math=True))
     assert run().needs_review is True
