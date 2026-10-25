@@ -1,26 +1,8 @@
-"""공통 에러 포맷 {"detail": 메시지, "code": 코드} (DEV_01 3.3절)."""
-from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+"""공통 에러 포맷 {"detail": 메시지, "code": 코드} (DEV_01 3.3절).
 
+오류 클래스와 처리기는 common-py(referoom_common)의 것을 그대로 쓴다. 인증이 던지는 ApiError와 이 서비스가 던지는 ApiError가
+같은 클래스여야 하나의 처리기가 모두 받는다. 기존 `from app.rag.errors import ApiError` 경로는 그대로 쓸 수 있다.
+"""
+from referoom_common import ApiError, register_error_handlers
 
-class ApiError(Exception):
-    def __init__(self, status: int, code: str, detail: str):
-        self.status = status
-        self.code = code
-        self.detail = detail
-
-
-def _body(code: str, detail: str) -> dict:
-    return {"detail": detail, "code": code}
-
-
-def register_error_handlers(app: FastAPI) -> None:
-    @app.exception_handler(ApiError)
-    async def _api_error(_: Request, exc: ApiError):
-        return JSONResponse(status_code=exc.status, content=_body(exc.code, exc.detail))
-
-    @app.exception_handler(RequestValidationError)
-    async def _validation_error(_: Request, __: RequestValidationError):
-        # 입력 원문(질문)이 응답·로그에 남지 않도록 상세 입력값은 반환하지 않는다
-        return JSONResponse(status_code=422, content=_body("VALIDATION_ERROR", "요청 형식이 올바르지 않습니다."))
+__all__ = ["ApiError", "register_error_handlers"]

@@ -6,7 +6,7 @@ import httpx
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
-from jose import jwt
+import jwt
 
 from app.data import ingest, repo
 from app.data.ids import paper_id_from_key
@@ -22,9 +22,13 @@ PAPER_FIELDS = {"id", "title", "authors", "year", "source_type", "tags", "status
 
 
 def token(**overrides) -> dict:
-    claims = {"iss": "simple-auth-server", "sub": "12", "team_id": TEAM, "role": "member", "view": "rnd",
-              "exp": int(time.time()) + 3600, **overrides}
-    jwt_token = jwt.encode({k: v for k, v in claims.items() if v is not None}, "test-secret", algorithm="HS256")
+    now = int(time.time())
+    claims = {"iss": "simple-auth-server", "sub": "12", "username": "tester", "role": "member", "team_id": TEAM,
+              "team_type": "dev", "view": "rnd", "iat": now, "exp": now + 3600, **overrides}
+    if claims["team_id"] is None and "team_type" not in overrides:
+        claims["team_type"] = None  # 팀 미가입은 team_id·team_type이 둘 다 null
+    keep = lambda k, v: v is not None or k in ("team_id", "team_type")  # noqa: E731
+    jwt_token = jwt.encode({k: v for k, v in claims.items() if keep(k, v)}, "test-secret-0123456789-abcdefghijklmnop", algorithm="HS256")
     return {"Authorization": f"Bearer {jwt_token}"}
 
 

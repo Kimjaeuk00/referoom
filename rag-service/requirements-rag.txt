@@ -5,7 +5,7 @@ python-multipart>=0.0.9   # PDF 업로드(/upload-paper) 폼 파싱
 pydantic>=2.11,<3.0
 python-dotenv>=1.0
 httpx>=0.27,<1.0
-python-jose>=3.3          # JWT 검증 (common-py 도착 전 auth_stub)
+-e ../common-py            # JWT 검증·에러 포맷·요청 로그 (PyJWT). rag-service 폴더에서 설치한다
 numpy>=1.26
 pypdf>=4.0                # PDF 텍스트 추출 (BSD). PyMuPDF는 AGPL이라 쓰지 않는다
 langchain-core>=1.2.7,<2.0

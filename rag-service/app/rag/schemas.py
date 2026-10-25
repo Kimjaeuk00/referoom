@@ -18,7 +18,7 @@ class RagRequest(BaseModel):
     question: str = Field(min_length=2, max_length=1000)
     source: Literal["pdf", "web", "all"] = "all"
     scope: Scope = Field(default_factory=Scope)
-    level: Level | None = None
+    level: Level | None = None  # 이번 질문의 설명 깊이. '더 쉽게'=L1, '더 깊게'=L3, 생략하면 기본 깊이(L2 규칙)
     view: View | None = None
     top_k: int = Field(default=5, ge=1, le=10)
 
