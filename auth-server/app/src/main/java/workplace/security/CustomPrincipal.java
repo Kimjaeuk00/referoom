@@ -3,7 +3,6 @@ package workplace.security;
 import java.security.Principal;
 
 import workplace.enums.Role;
-import workplace.enums.SkillLevel;
 import workplace.enums.TeamType;
 import workplace.enums.ViewType;
 
@@ -13,7 +12,6 @@ public record CustomPrincipal(
     Role role,
     Long teamId,
     TeamType teamType,
-    SkillLevel level,
     ViewType view
 ) implements Principal {
 

@@ -74,7 +74,6 @@ INSERT INTO users (
     password,
     team_id,
     role,
-    skill_level,
     view_pref
 )
 SELECT
@@ -83,7 +82,6 @@ SELECT
     @demo_password_hash,
     @demo_team_id,
     'team_admin',
-    'L2',
     NULL
 WHERE NOT EXISTS (
     SELECT 1
@@ -100,7 +98,6 @@ INSERT INTO users (
     password,
     team_id,
     role,
-    skill_level,
     view_pref
 )
 SELECT
@@ -109,7 +106,6 @@ SELECT
     @demo_password_hash,
     @demo_team_id,
     'member',
-    'L1',
     NULL
 WHERE NOT EXISTS (
     SELECT 1
@@ -126,7 +122,6 @@ INSERT INTO users (
     password,
     team_id,
     role,
-    skill_level,
     view_pref
 )
 SELECT
@@ -135,7 +130,6 @@ SELECT
     @demo_password_hash,
     NULL,
     'member',
-    'L2',
     NULL
 WHERE NOT EXISTS (
     SELECT 1
@@ -151,7 +145,6 @@ INSERT INTO users (
     password,
     team_id,
     role,
-    skill_level,
     view_pref
 )
 SELECT
@@ -160,7 +153,6 @@ SELECT
     @demo_password_hash,
     @demo_rnd_team_id,
     'team_admin',
-    'L3',
     NULL
 WHERE NOT EXISTS (
     SELECT 1
@@ -177,7 +169,6 @@ INSERT INTO users (
     password,
     team_id,
     role,
-    skill_level,
     view_pref
 )
 SELECT
@@ -186,7 +177,6 @@ SELECT
     @demo_password_hash,
     @demo_rnd_team_id,
     'member',
-    'L2',
     NULL
 WHERE NOT EXISTS (
     SELECT 1

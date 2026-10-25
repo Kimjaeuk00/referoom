@@ -9,7 +9,6 @@ import workplace.dto.res.MeResDTO;
 import workplace.dto.res.TokenUserResDTO;
 import workplace.entity.User;
 import workplace.enums.ErrorCode;
-import workplace.enums.SkillLevel;
 import workplace.enums.ViewType;
 import workplace.exception.ApiException;
 import workplace.repository.UserRepository;
@@ -39,7 +38,7 @@ public class UserService {
         Long userId,
         UpdateProfileReqDTO request
     ) {
-        if (request.level() == null && request.view() == null) {
+        if (request.view() == null) {
             throw new ApiException(
                 ErrorCode.VALIDATION_ERROR
             );
@@ -52,15 +51,7 @@ public class UserService {
                 )
             );
 
-        SkillLevel skillLevel = request.level() == null
-            ? null
-            : SkillLevel.valueOf(request.level());
-
-        ViewType viewPref = request.view() == null
-            ? null
-            : ViewType.valueOf(request.view());
-
-        user.updateProfile(skillLevel, viewPref);
+        user.updateProfile(ViewType.valueOf(request.view()));
 
         String accessToken = jwtTokenProvider.createToken(user);
 

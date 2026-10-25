@@ -11,7 +11,7 @@ export const useProfileStore = defineStore('profile', () => {
   const displayName = computed(() => auth.user?.displayName || auth.claims?.username || '')
   const team = computed(() => auth.user?.team ?? null)
 
-  // 관점을 바꾸면 응답의 새 토큰으로 바꿔야 AI 서비스에 반영된다(DEV_01 4.1). 수준(level)은 v0.2에서 화면에서 다루지 않는다.
+  // 관점을 바꾸면 응답의 새 토큰으로 바꿔야 AI 서비스에 반영된다(DEV_01 4.1). 사용자 수준(level)은 v0.2에서 없어졌다.
   async function updateProfile(changes) {
     const data = await api.auth('/api/me/profile', { method: 'PATCH', json: changes })
     auth.applySession(data)

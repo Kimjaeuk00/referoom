@@ -55,9 +55,9 @@ const TEAMS = new Map([
 const users = new Map()
 let userSeq = 20
 
-function addUser({ username, displayName, role = 'member', level = 'L2', view = null, teamId = null }) {
+function addUser({ username, displayName, role = 'member', view = null, teamId = null }) {
   const team = TEAMS.get(teamId)
-  const user = { id: ++userSeq, username, displayName: displayName || username, role, level, view: view ?? team?.type ?? 'dev', teamId }
+  const user = { id: ++userSeq, username, displayName: displayName || username, role, view: view ?? team?.type ?? 'dev', teamId }
   users.set(username, user)
   return user
 }
@@ -70,7 +70,7 @@ addUser({ username: 'noteam', displayName: '서연' })
 const teamView = (team) => (team ? { id: team.id, name: team.name, type: team.type } : null)
 
 function publicUser(u) {
-  return { id: u.id, username: u.username, displayName: u.displayName, role: u.role, level: u.level, view: u.view, team: teamView(TEAMS.get(u.teamId)) }
+  return { id: u.id, username: u.username, displayName: u.displayName, role: u.role, view: u.view, team: teamView(TEAMS.get(u.teamId)) }
 }
 
 function issueToken(u) {
@@ -83,7 +83,6 @@ function issueToken(u) {
     role: u.role,
     team_id: team?.id ?? null,
     team_type: team?.type ?? null,
-    level: u.level,
     view: u.view,
     iat: now,
     exp: now + 3600,
@@ -132,10 +131,8 @@ function me({ claims }) {
 function updateProfile({ body, claims }) {
   const user = userOf(claims)
   if (!user) return javaError(401, 'UNAUTHORIZED', 'unknown user')
-  if (body?.level == null && body?.view == null) return javaError(400, 'VALIDATION_ERROR', 'level 또는 view가 필요합니다')
-  if (body?.level && !['L1', 'L2', 'L3'].includes(body.level)) return javaError(422, 'VALIDATION_ERROR', 'level')
-  if (body?.view && !['dev', 'rnd'].includes(body.view)) return javaError(422, 'VALIDATION_ERROR', 'view')
-  Object.assign(user, { level: body?.level ?? user.level, view: body?.view ?? user.view })
+  if (!['dev', 'rnd'].includes(body?.view)) return javaError(422, 'VALIDATION_ERROR', 'view는 dev, rnd 중 하나여야 합니다') // 프로필은 view만 바꾼다(v0.2)
+  user.view = body.view
   return [200, session(user)]
 }
 

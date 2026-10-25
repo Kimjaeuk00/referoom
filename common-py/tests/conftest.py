@@ -59,7 +59,7 @@ def make_token(secret):
             'iss': 'simple-auth-server', 'sub': '101',
             'username': 'test-member', 'role': 'member',
             'team_id': 7, 'team_type': 'dev',
-            'level': 'L2', 'view': 'dev',
+            'view': 'dev',
             'iat': now - 10, 'exp': now + 3600,
         }
         claims.update(changes or {})

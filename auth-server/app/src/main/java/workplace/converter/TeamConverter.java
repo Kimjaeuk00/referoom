@@ -79,7 +79,6 @@ public final class TeamConverter {
             .username(user.getUsername())
             .displayName(user.getDisplayName())
             .role(user.getRole())
-            .level(user.getSkillLevel())
             .view(user.getEffectiveView())
             .build();
     }

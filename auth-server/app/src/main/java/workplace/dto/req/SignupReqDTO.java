@@ -17,9 +17,6 @@ public record SignupReqDTO(
     @Size(max = 100)
     String displayName,
 
-    @Pattern(regexp = "L1|L2|L3")
-    String level,
-
     @Pattern(regexp = "create|join")
     String teamMode,
 

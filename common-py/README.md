@@ -2,7 +2,7 @@
 
 RAG·음성 서비스에서 함께 사용하는 JWT 인증, 팀·관리자 권한, 오류 응답, 요청 로그 패키지다. 패키지 설치 이름은 `referoom-common`, Python import 이름은 `referoom_common`이다.
 
-백엔드 담당자가 `common-py/`를 관리하고, 각 서비스 담당자가 자신의 환경·진입점·라우터에 적용한다. 이 문서의 서비스 코드는 적용 예시이며, 이 문서 작성만으로 각 서비스에 반영된 것은 아니다.
+이 저장소의 RAG·음성 서비스가 `common-py/`를 가져다 쓴다. 서비스마다 자신의 환경·진입점·라우터에 적용해야 하고, 이 문서의 서비스 코드는 적용 예시다. 어느 서비스에 적용이 끝났는지는 5장과 6장에 적어 둔다.
 
 ## 1. 설치
 
@@ -22,7 +22,7 @@ python -m pip check
 python -c "from referoom_common import CurrentUser, require_team; print('common-py import OK')"
 ```
 
-`requirements-rag.txt`와 RAG 앱 코드는 RAG 담당자의 구현 브랜치에 있다. 아직 해당 변경을 받지 않은 브랜치에서는 구현 변경을 먼저 반영한 뒤 설치한다. 빈 requirements 파일을 새로 만들어 대체하지 않는다.
+`requirements-rag.txt`는 RAG 서비스의 의존성 목록이다. 빈 requirements 파일을 새로 만들어 대체하지 않는다.
 
 ### 음성 서비스
 
@@ -46,14 +46,14 @@ python -c "from referoom_common import CurrentUser, require_team; print('common-
 
 ### Docker 적용 시
 
-서비스 Dockerfile 담당자와 배포 담당자가 **저장소 루트를 build context로 사용**하도록 맞춰야 형제 폴더인 `common-py/`를 복사할 수 있다. 예를 들어 해당 context를 전제로 서비스 Dockerfile에 다음 단계를 추가할 수 있다.
+**저장소 루트를 build context로 사용**해야 형제 폴더인 `common-py/`를 복사할 수 있다. 예를 들어 해당 context를 전제로 서비스 Dockerfile에 다음 단계를 추가할 수 있다.
 
 ```dockerfile
 COPY common-py/ /opt/referoom-common/
 RUN python -m pip install --no-cache-dir /opt/referoom-common
 ```
 
-컨테이너에는 일반 설치를 사용한다. context가 바뀌면 기존 서비스 코드·requirements의 `COPY` 경로도 함께 조정해야 한다. 기존 음성 Dockerfile은 서비스 폴더 기준으로 작성되어 있으므로 위 두 줄만 추가하면 배포가 끝나는 것은 아니다. Compose와 다른 서비스 파일 변경은 각 소유자가 진행한다.
+컨테이너에는 일반 설치를 사용한다. context가 바뀌면 기존 서비스 코드·requirements의 `COPY` 경로도 함께 조정해야 한다. 기존 음성 Dockerfile은 서비스 폴더 기준으로 작성되어 있으므로 위 두 줄만 추가하면 배포가 끝나는 것은 아니다. Compose 구성은 별도 작업이다.
 
 ## 2. 환경변수
 
@@ -62,7 +62,7 @@ RUN python -m pip install --no-cache-dir /opt/referoom-common
 - `JWT_SECRET`: 필수. Java 인증 서버와 **완전히 동일한 문자열**을 사용한다. 임의의 새 키를 Python에만 만들면 Java 토큰을 검증할 수 없다. 이 패키지는 키를 strip하거나 Base64로 다시 해석하지 않는다.
 - `CORS_ALLOWED_ORIGINS`: 쉼표로 구분한 브라우저 origin. 기본값은 `http://localhost:5174,http://localhost:8008`이다. 빈 목록과 `*`는 허용하지 않는다. 실제 프론트 주소에 맞춘다.
 
-현재 발급자 `simple-auth-server`와 알고리즘 `HS256`은 공통 설정에 고정되어 있다. `JWT_ISSUER`나 `JWT_ALGORITHM` 환경변수를 추가해도 이 패키지의 값은 바뀌지 않는다. 발급 서버 계약이 바뀌면 백엔드 담당자와 함께 변경한다.
+현재 발급자 `simple-auth-server`와 알고리즘 `HS256`은 공통 설정에 고정되어 있다. `JWT_ISSUER`나 `JWT_ALGORITHM` 환경변수를 추가해도 이 패키지의 값은 바뀌지 않는다. 발급 서버(Java 인증서버)의 계약이 바뀌면 이 값도 함께 바꾼다.
 
 서비스 `.env` 예시는 다음과 같다. 키 자리표시자는 실제 값으로 바꾸고 Git에는 올리지 않는다.
 
@@ -118,7 +118,7 @@ app.add_middleware(RequestLoggingMiddleware)
 
 이미 CORS가 있으면 기존 등록을 조정한다. 동일한 미들웨어나 오류 처리기를 중복 등록하지 않는다. `get_settings()`의 origin 값은 설정일 뿐이며 위처럼 CORS 미들웨어에 전달해야 적용된다. 프론트가 응답의 요청 ID를 읽으려면 `expose_headers`가 필요하다.
 
-정상 요청·처리된 예외·사전 요청의 CORS는 서비스에서 확인한다. 예기치 않은 500은 FastAPI의 바깥쪽 오류 미들웨어에서 응답할 수 있으므로, 그 응답에도 CORS가 필요하면 서비스 담당자가 전체 ASGI 앱을 CORS로 감싸는 구성까지 검토·검증한다. 위 기본 등록만으로 모든 미처리 500의 CORS를 보장하지는 않는다.
+정상 요청·처리된 예외·사전 요청의 CORS는 서비스에서 확인한다. 예기치 않은 500은 FastAPI의 바깥쪽 오류 미들웨어에서 응답할 수 있으므로, 그 응답에도 CORS가 필요하면 전체 ASGI 앱을 CORS로 감싸는 구성까지 검토·검증한다. 위 기본 등록만으로 모든 미처리 500의 CORS를 보장하지는 않는다.
 
 ## 4. 인증과 권한
 
@@ -131,11 +131,10 @@ app.add_middleware(RequestLoggingMiddleware)
 - `role`: `member` 또는 `team_admin`.
 - `team_id`: 양의 정수 또는 팀 미가입을 나타내는 `None`.
 - `team_type`: `dev`, `rnd` 또는 미가입 시 `None`.
-- `level`: `L1`, `L2`, `L3`.
 - `view`: `dev`, `rnd`.
 - `id`: `user_id`의 문자열 별칭. 기존 음성 저장소의 소유자 식별에 사용한다.
 
-JWT는 `iss/sub/username/role/team_id/team_type/level/view/iat/exp`를 포함해야 한다. 팀 미가입도 `team_id`와 `team_type`을 생략하지 않고 둘 다 `null`로 발급한다. 서명·허용 알고리즘·발급자·만료와 claim 형식이 검증되어야 사용자를 반환한다.
+JWT는 `iss/sub/username/role/team_id/team_type/view/iat/exp`를 포함해야 한다. v0.2부터 사용자 수준(`level`)은 발급하지도 요구하지도 않으며, 예전 토큰에 `level`이 들어 있어도 무시한다. 팀 미가입도 `team_id`와 `team_type`을 생략하지 않고 둘 다 `null`로 발급한다. 서명·허용 알고리즘·발급자·만료와 claim 형식이 검증되어야 사용자를 반환한다.
 
 Python은 회원 DB를 조회하지 않는다. 역할·팀은 토큰 발급 시점 정보이며, Java의 프로필 수정·팀 가입 응답에서 새 토큰을 받으면 클라이언트가 교체해야 한다. 이 패키지에는 토큰 블랙리스트나 즉시 로그아웃 무효화 기능이 없다.
 
@@ -185,31 +184,23 @@ def admin(user: CurrentUser = Depends(require_admin)):
 
 Vue는 현재 계약대로 Bearer와 `credentials: "omit"`을 사용한다. 쿠키 방식을 별도로 사용할 때만 클라이언트의 credentials와 서비스 CORS를 함께 맞춘다. Swagger에는 `bearerAuth`가 표시되며 로그인 응답의 토큰 문자열만 넣는다. 쿠키 입력창은 제공하지 않는다.
 
-## 5. RAG 담당자 적용 지점
+## 5. RAG 서비스 적용 상태 (적용 완료)
 
-확인한 RAG 구현 브랜치는 `app/rag/auth_stub.py`와 자체 `app/rag/errors.py`를 사용한다. 다음을 한 묶음으로 적용한다.
+`rag-service/`에 2026-10-25 적용했다. 코드의 기준 위치는 다음과 같다.
 
-1. 서비스 가상환경에 패키지를 설치하고 Java와 같은 `JWT_SECRET`을 주입한다.
-2. `app/rag/deps.py`에서 인증 import를 아래 코드로 교체한다. 기존 검색 저장소 선택 분기는 유지한다.
+- 설치: `requirements-rag.txt`의 `-e ../common-py`. 가상환경에서 `rag-service` 폴더 기준으로 설치한다.
+- `app/rag/deps.py`: `from referoom_common import CurrentUser, require_team`. 예전 임시 인증(`auth_stub.py`, python-jose)은 삭제했다.
+- `app/rag/errors.py`: `ApiError`, `register_error_handlers`를 공통 모듈에서 다시 내보낸다. 서비스 코드의 `from app.rag.errors import ApiError`는 그대로 공통 클래스를 가리키므로 인증 오류와 서비스 오류가 한 처리기로 응답된다.
+- `app/main.py`: `get_settings()`로 `JWT_SECRET`을 확인하고(없으면 기동 실패), CORS는 공통 설정의 허용 주소와 `X-Request-Id` 노출을 쓰며, `RequestLoggingMiddleware`를 마지막에 등록한다.
+- `app/rag/router.py`: `/rag-query`가 `request.state.in_tok`, `out_tok`을 채워 요청 로그에 LLM 토큰 수가 남는다.
+- 설명 깊이: 사용자 수준(`level`)은 JWT에 없다. `/rag-query`는 요청 body의 `level`(`L1`/`L3`, 생략하면 기본 깊이)만 쓴다.
+- 데이터 API(`app/data/`)도 같은 `require_team`을 거치고, 관리자 확인(`app/data/deps.py`)은 라이브러리 설정 확인과 함께 서비스 쪽에 둔다.
 
-```python
-from referoom_common import CurrentUser, require_team
-```
+확인한 것: `tests/rag/test_common_wiring.py`(오류 형식, 요청 ID, 요청 로그의 사용자·팀·토큰 수, CORS 사전 요청, 예전 `level` claim 무시)와 서버 전체 테스트. 실제 Java 로그인 토큰으로 실행 중인 서버에 붙이는 E2E는 별도로 확인한다.
 
-3. `app/rag/errors.py`의 자체 예외·처리기를 아래처럼 공통 항목을 다시 내보내는 코드로 교체할 수 있다. 그러면 기존 `from app.rag.errors import ApiError` 경로를 유지하면서 실제 클래스는 공통 항목으로 통일된다.
+기존 `ApiError`와 공통 `ApiError`는 이름이 같아도 다른 클래스다. 인증만 교체하고 예외 처리기를 그대로 두면 인증 실패가 500으로 처리될 수 있으므로, 다른 서비스에 적용할 때도 오류 발생 지점과 처리기가 같은 공통 클래스를 쓰는지 확인한다.
 
-```python
-from referoom_common import ApiError, register_error_handlers
-
-__all__ = ["ApiError", "register_error_handlers"]
-```
-
-4. `app/main.py`에서 공통 예외 처리·로깅을 한 번씩 등록하고 CORS에 `X-Request-Id` 노출을 추가한다. 기존 RAG 라우터 등록을 유지한다.
-5. `/rag-query`의 `Depends(require_team)`, 실제 저장소의 `user.team_id` 필터, 토큰 사용량 기록을 확인한다. 데이터 라우터도 기능에 맞게 `require_team` 또는 `require_admin`을 적용한다.
-
-기존 `ApiError`와 공통 `ApiError`는 이름이 같아도 다른 클래스다. 인증만 교체하고 예외 처리기를 그대로 두면 인증 실패가 500으로 처리될 수 있다. 모든 오류 발생 지점과 처리기가 같은 공통 클래스를 사용하도록 맞춘다. 인증·저장소 스텁으로 성공한 응답은 실제 검색 E2E 검증과 구분한다.
-
-## 6. 음성 담당자 적용 지점
+## 6. 음성 서비스 적용 지점 (아직 적용 전)
 
 현재 음성 코드는 공통 `require_team` 연결을 기다리는 라우터 팩토리가 준비되어 있다. 기존 `app/main.py`의 app·lifespan·환경 로딩을 유지하고 공통 예외·로그를 등록한 다음, 라우터 등록 위치에 다음 코드를 적용한다.
 
@@ -281,7 +272,7 @@ HTTP 상태 503과 함께 아래 형식을 반환한다.
 - `user_id/team_id`: JWT 검증이 기록한 요청 상태. 인증 전 실패는 `null`, 미가입 팀은 `null`.
 - `in_tok/out_tok`: 서비스가 기록한 실제 입력·출력 토큰 수. 미기록·잘못된 값은 `null`, 실제 측정한 0은 `0`.
 
-인증 성공 시 사용자·팀 ID는 자동 기록된다. **LLM 토큰 수는 공통 모듈이 계산하지 않는다.** RAG 담당자가 API usage를 읽어 `request.state`에 넣어야 한다. 여러 번 모델을 호출했다면 합산 기준을 정해 실제 값을 기록한다. 측정하지 못한 값을 0으로 대체하지 않는다.
+인증 성공 시 사용자·팀 ID는 자동 기록된다. **LLM 토큰 수는 공통 모듈이 계산하지 않는다.** RAG 서비스가 API usage를 읽어 `request.state`에 넣어야 한다. 여러 번 모델을 호출했다면 합산 기준을 정해 실제 값을 기록한다. 측정하지 못한 값을 0으로 대체하지 않는다.
 
 RAG 라우터에서 다음처럼 예외 경로까지 고려해 기록할 수 있다. 기존 함수의 해당 부분에 적용하는 예시다.
 
@@ -318,13 +309,13 @@ python -m pytest -q tests
 
 테스트는 매번 임시 키·가상 JWT를 만들고 FastAPI TestClient를 사용한다. 실제 `.env`·회원 DB·Java 서버·LLM·Whisper·TTS·외부 네트워크가 필요하지 않으며 운영 키를 사용하지 않는다.
 
-2026-10-24 검증 결과는 **125개 통과**다.
+2026-10-25 검증 결과는 **129개 통과**다. (2026-10-24의 125개에서 `level` 거부 테스트 2개를 빼고, 예전 `level` claim을 무시하는 테스트 5개와 `CurrentUser`에 `level`이 없다는 테스트 1개를 더했다.)
 
-- `test_auth.py`: 74개. Bearer·쿠키·변조/만료/claim·팀/관리자·환경 설정.
+- `test_auth.py`: 78개. Bearer·쿠키·변조/만료/claim·팀/관리자·환경 설정.
 - `test_errors.py`: 30개. 서비스/HTTP/입력 오류, 500 비노출, 요청 ID.
 - `test_logging_mw.py`: 21개. JSON 필드·토큰 수·민감정보 비노출·동시 요청·스트리밍.
 
-검증 환경은 Python 3.11.15, FastAPI 0.162.0, Starlette 1.9.0, httpx 0.28.1, PyJWT 2.15.1, pytest 9.1.1이다. Starlette TestClient의 httpx 사용 중단 예고가 1건 있었고 실패는 없었다. 각 서비스의 전체 고정 의존성 조합과 모델 실행까지 검증한 결과는 아니다.
+검증 환경은 Python 3.11.15, FastAPI 0.162.0, Starlette 1.10.0, httpx 0.28.1, PyJWT 2.15.1, pytest 9.1.1이다. Starlette TestClient의 httpx 사용 중단 예고가 1건 있었고 실패는 없었다. 각 서비스의 전체 고정 의존성 조합과 모델 실행까지 검증한 결과는 아니다.
 
 ## 10. 각 서비스에 적용한 뒤 확인할 사항
 
@@ -336,4 +327,4 @@ python -m pytest -q tests
 6. RAG usage가 로그에 남으며 알 수 없는 사용량과 실제 0이 구분된다. 질문·토큰 원문은 로그에 남지 않는다.
 7. 음성 모델이 준비되면 STT·TTS·인증 오디오 다운로드를 확인하고, 다른 사용자 오디오·만료 오디오를 읽을 수 없는지 확인한다.
 
-공통 모듈 테스트 통과와 실제 Java→RAG·음성 서비스 E2E 성공은 별도다. 배포 시에는 컨테이너의 패키지 설치·환경 주입·CORS·모델 준비 상태까지 각 서비스 담당자와 함께 확인한다.
+공통 모듈 테스트 통과와 실제 Java→RAG·음성 서비스 E2E 성공은 별도다. 배포 시에는 컨테이너의 패키지 설치·환경 주입·CORS·모델 준비 상태까지 서비스별로 확인한다.

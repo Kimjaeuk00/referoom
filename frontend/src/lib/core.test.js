@@ -10,7 +10,7 @@ function token(payload) {
 }
 
 test('decodeJwt: 한글이 든 payload와 claim을 읽는다', () => {
-  const claims = decodeJwt(token({ sub: '12', username: '민수', team_id: 3, level: 'L1', exp: 2_000_000_000 }))
+  const claims = decodeJwt(token({ sub: '12', username: '민수', team_id: 3, exp: 2_000_000_000 }))
   assert.equal(claims.username, '민수')
   assert.equal(claims.team_id, 3)
   assert.equal(decodeJwt('not-a-token'), null)

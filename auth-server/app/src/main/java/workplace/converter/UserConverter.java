@@ -11,7 +11,6 @@ import workplace.dto.res.UserResDTO;
 import workplace.entity.Team;
 import workplace.entity.User;
 import workplace.enums.Role;
-import workplace.enums.SkillLevel;
 
 public final class UserConverter {
 
@@ -24,17 +23,12 @@ public final class UserConverter {
         Team team,
         Role role
     ) {
-        SkillLevel skillLevel = request.level() == null
-            ? SkillLevel.L2
-            : SkillLevel.valueOf(request.level());
-
         return User.builder()
             .username(request.username())
             .displayName(request.displayName())
             .password(encodedPassword)
             .team(team)
             .role(role)
-            .skillLevel(skillLevel)
             .build();
     }
 
@@ -60,7 +54,6 @@ public final class UserConverter {
             .username(user.getUsername())
             .displayName(user.getDisplayName())
             .role(user.getRole())
-            .level(user.getSkillLevel())
             .view(user.getEffectiveView())
             .team(TeamConverter.toTeamInfoDTO(user.getTeam()))
             .build();

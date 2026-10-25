@@ -91,11 +91,11 @@ jq -n '{username: env.E2E_OTHER_USERNAME, password: env.E2E_OTHER_PASSWORD}' \
 jq -n --argjson paper_id "$E2E_PAPER_ID" '{
     question: env.E2E_QUESTION, source: "pdf",
     scope: {type: "paper", ids: [$paper_id]},
-    level: "L2", view: "dev", top_k: 5
+    view: "dev", top_k: 5
 }' >"$WORK_DIR/question.json"
 jq -n '{
     question: env.E2E_OUT_OF_SCOPE_QUESTION, source: "all",
-    scope: {type: "all"}, level: "L2", view: "dev", top_k: 5
+    scope: {type: "all"}, view: "dev", top_k: 5
 }' >"$WORK_DIR/outside.json"
 
 SCHEMA='
