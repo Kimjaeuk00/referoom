@@ -6,8 +6,6 @@ CREATE TABLE teams (
 
     name VARCHAR(100) NOT NULL,
 
-    team_type ENUM('dev', 'rnd') NOT NULL,
-
     invite_code VARCHAR(16) NOT NULL,
 
     created_at TIMESTAMP
