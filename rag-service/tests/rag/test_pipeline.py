@@ -330,3 +330,9 @@ def test_grouped_citations_are_split_so_the_chips_work(fake_llm, set_hits):
     r = run()
     assert r.answer == "두 근거가 같은 말을 한다 [S1] [S2]."
     assert {d.label for d in r.source_details} == {"S1", "S2"}  # 묶음 표기여도 인용 검증이 두 라벨을 모두 확인한다
+
+
+def test_system_prompt_forbids_answering_with_a_similarly_named_method():
+    # 프롬프트 문구 자체의 시험이다(실제 모델 동작은 eval과 로컬 반복 측정으로 본다). 규칙을 지우면 R09류 환각이 다시 난다.
+    from app.rag.prompts import SYSTEM_PROMPT
+    assert "이름이 [근거]에 나오지 않으면" in SYSTEM_PROMPT and "비슷한 다른 방법" in SYSTEM_PROMPT
