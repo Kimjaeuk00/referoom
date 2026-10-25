@@ -137,7 +137,7 @@ class OpenAIJudge:
             "input": json.dumps({
                 "question": question["question"], "expected_answer": question["expected_answer"],
                 "key_points": [] if question["should_refuse"] else question["key_points"],
-                "should_refuse": question["should_refuse"], "level": question["level"], "view": question["view"],
+                "should_refuse": question["should_refuse"], "level": question["level"],
                 "answer": response["answer"], "handoff": response["handoff"],
                 "context_complete": complete, "context_passages": passages,
             }, ensure_ascii=False),
