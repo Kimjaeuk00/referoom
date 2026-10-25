@@ -80,3 +80,6 @@ Thumbs.db
 # eval/questions/: 평가 질문이라서 올립니다
 # db/migrations/ : DB 스키마 SQL이라서 올립니다
 # .gitkeep       : 빈 폴더를 유지하는 빈 파일이라서 올립니다
+
+# 개발 실행 기록 (PID·로그)
+.run/
