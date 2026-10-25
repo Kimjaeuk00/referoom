@@ -68,6 +68,12 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")  # 30문항 비교
 TOPIC_MIN_RELEVANCE = float(os.getenv("TOPIC_MIN_RELEVANCE", "0.50"))  # 0.45→0.50: arXiv 후보 40건(질의 4개) 점수 0.43~0.74, 무관한 결과 0.43·0.47, 관련 결과 ≥0.53. 표본이 작아 후보가 쌓이면 다시 본다
 TOPIC_CACHE_SECONDS = int(os.getenv("TOPIC_CACHE_SECONDS", "600"))  # 검색한 후보를 /upload-topic이 다시 쓰도록 보관하는 시간
 
+# 팀당 호출 한도: 비용이 큰 경로(/verify, /topic-suggest, /summary, /rag-query mode=prior)가 함께 쓰는 한 팀의 호출 수. 0이면 꺼진다.
+# 기본값을 0으로 둔 이유: 팀원 수와 하루 질문 수를 아직 모른다. 실측 입력 토큰은 선행연구 7.3k, 검증 5.7k, 요약 3.7k, 주제 3.2k라
+# 호출 한 번이 튜터 질문의 몇 배 비용이다. 사용량을 정한 뒤 RATE_LIMIT_CALLS로 켠다. 프로세스 메모리 기준이라 워커가 여럿이면 근사치다
+RATE_LIMIT_CALLS = int(os.getenv("RATE_LIMIT_CALLS", "0"))
+RATE_LIMIT_WINDOW_SECONDS = float(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600"))  # 한도를 세는 창 길이(초). 기본 1시간
+
 # ---- v0.2 모드 (선행연구 정리표·주제 제안·원고 검증·논문 요약) ----
 # 추출·판독 호출(정리표 칸, 한계, 원고의 주장, 근거에서 읽은 값)은 같은 입력에 같은 답이 나와야 한다. 기본 온도(LLM_TEMPERATURE)로는 같은 원고의 검색 문구가
 # 실행마다 달라 같은 주장이 어느 때는 근거가 있고 어느 때는 없다고 나왔다(실제 호출 3회). 그래서 이 호출들은 0으로 고정한다. 추론 모델에는 적용되지 않는다

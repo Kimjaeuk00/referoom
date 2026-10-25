@@ -5,7 +5,7 @@
 from fastapi import APIRouter, Depends, Request
 from starlette.concurrency import run_in_threadpool
 
-from app.rag import summary, topic, verify
+from app.rag import rate_limit, summary, topic, verify
 from app.rag.deps import CurrentUser, require_team, store
 from app.rag.errors import ApiError
 from app.rag.schemas import SummaryRequest, SummaryResponse, TopicRequest, TopicResponse, VerifyRequest, VerifyResponse
@@ -27,6 +27,7 @@ def _record_tokens(request: Request, usage: dict) -> None:
 @router.post("/topic-suggest", response_model=TopicResponse, summary="선택한 논문의 한계로 연구 주제 후보 제안", tags=["주제 제안"])
 async def topic_suggest(request: Request, req: TopicRequest, user: CurrentUser = Depends(require_team)) -> TopicResponse:
     _ready()
+    rate_limit.check_team(user.team_id)
     usage: dict = {}
     resp = await run_in_threadpool(topic.run, req, user, usage)
     _record_tokens(request, usage)
@@ -36,6 +37,7 @@ async def topic_suggest(request: Request, req: TopicRequest, user: CurrentUser =
 @router.post("/verify", response_model=VerifyResponse, summary="원고의 수치를 선행연구 근거와 대조", tags=["원고 검증"])
 async def verify_manuscript(request: Request, req: VerifyRequest, user: CurrentUser = Depends(require_team)) -> VerifyResponse:
     _ready()
+    rate_limit.check_team(user.team_id)
     usage: dict = {}
     resp = await run_in_threadpool(verify.run, req, user, usage)
     _record_tokens(request, usage)
@@ -45,6 +47,7 @@ async def verify_manuscript(request: Request, req: VerifyRequest, user: CurrentU
 @router.post("/summary", response_model=SummaryResponse, summary="논문 한 편을 섹션별로 요약", tags=["논문 요약"])
 async def summarize_paper(request: Request, req: SummaryRequest, user: CurrentUser = Depends(require_team)) -> SummaryResponse:
     _ready()
+    rate_limit.check_team(user.team_id)
     usage: dict = {}
     resp = await run_in_threadpool(summary.run, req, user, usage)
     _record_tokens(request, usage)
