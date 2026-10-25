@@ -1,12 +1,13 @@
 """외부 라이브러리를 변경하지 않는 Zotero 등록 테스트."""
 
 import asyncio
+import io
 import json
 import unittest
 from urllib.parse import parse_qs
 
 import httpx
-import pymupdf
+from pypdf import PdfWriter
 
 from app.data.providers.arxiv import PaperCandidate
 from app.data.providers.zotero import ZoteroProvider, ZoteroError
@@ -17,9 +18,11 @@ class ImportTest(unittest.TestCase):
         asyncio.run(self.run_import())
 
     async def run_import(self):
-        with pymupdf.open() as document:
-            document.new_page()
-            pdf = document.tobytes()
+        writer = PdfWriter()
+        writer.add_blank_page(72, 72)
+        buffer = io.BytesIO()
+        writer.write(buffer)
+        pdf = buffer.getvalue()
         items, collections, uploads = {}, [], []
         pending = {}
         fail_storage = [True]
