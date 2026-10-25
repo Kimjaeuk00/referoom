@@ -28,8 +28,6 @@ class CurrentUser:
     username: str
     role: str
     team_id: int | None
-    team_type: str | None
-    view: str
 
     @property
     def id(self) -> str:
@@ -62,7 +60,7 @@ def _positive_integer(value: Any) -> int:
 def _to_current_user(
     claims: dict[str, Any],
 ) -> CurrentUser:
-    # v0.2: 사용자 수준(level)은 더 이상 쓰지 않는다. 예전 토큰에 level claim이 있어도 읽지 않고 무시한다.
+    # 사용자 수준(level), 관점(view), 팀 유형(team_type)은 더 이상 쓰지 않는다. 예전 토큰에 있어도 읽지 않고 무시한다.
     subject = _required_string(claims, "sub")
 
     if re.fullmatch(r"[0-9]{1,19}", subject) is None:
@@ -71,13 +69,9 @@ def _to_current_user(
     user_id = _positive_integer(int(subject))
     username = _required_string(claims, "username")
     role = _required_string(claims, "role")
-    view = _required_string(claims, "view")
 
     if role not in {"member", "team_admin"}:
         raise ValueError("Invalid role")
-
-    if view not in {"dev", "rnd"}:
-        raise ValueError("Invalid view")
 
     issued_at = _positive_integer(claims.get("iat"))
     expires_at = _positive_integer(claims.get("exp"))
@@ -86,29 +80,19 @@ def _to_current_user(
         raise ValueError("Invalid token lifetime")
 
     # 팀 미가입을 나타내는 null과 claim 누락은 구분한다.
-    if "team_id" not in claims or "team_type" not in claims:
+    if "team_id" not in claims:
         raise ValueError("Missing team claims")
 
     team_id = claims["team_id"]
-    team_type = claims["team_type"]
-
-    if (team_id is None) != (team_type is None):
-        raise ValueError("Inconsistent team claims")
 
     if team_id is not None:
         team_id = _positive_integer(team_id)
-        team_type = _required_string(claims, "team_type")
-
-        if team_type not in {"dev", "rnd"}:
-            raise ValueError("Invalid team type")
 
     return CurrentUser(
         user_id=user_id,
         username=username,
         role=role,
         team_id=team_id,
-        team_type=team_type,
-        view=view,
     )
 
 
@@ -167,7 +151,6 @@ def verify_token(
                     "sub",
                     "username",
                     "role",
-                    "view",
                     "iat",
                     "exp",
                 ],

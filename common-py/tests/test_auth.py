@@ -24,8 +24,7 @@ def test_bearer_user_and_voice_id_alias(client, make_token):
     assert response.status_code == 200
     assert response.json() == {
         'user_id': 101, 'id': '101', 'username': 'test-member',
-        'role': 'member', 'team_id': 7, 'team_type': 'dev',
-        'view': 'dev',
+        'role': 'member', 'team_id': 7,
     }
 
 
@@ -37,12 +36,28 @@ def test_legacy_level_claim_is_ignored(client, make_token, legacy):
     assert 'level' not in response.json()
 
 
-def test_current_user_has_no_level():
+@pytest.mark.parametrize('legacy', [
+    {'view': 'dev'}, {'view': 'all'}, {'view': None},
+    {'team_type': 'rnd'}, {'team_type': 'other'}, {'team_type': None},
+])
+def test_legacy_view_and_team_type_claims_are_ignored(client, make_token, legacy):
+    # 관점·팀 유형은 없어졌다. 예전 토큰에 어떤 값이 있어도 통과하고 사용자에게 노출되지 않는다.
+    response = client.get('/me', headers=bearer(make_token(legacy)))
+    assert response.status_code == 200
+    assert not {'view', 'team_type'} & set(response.json())
+
+
+@pytest.mark.parametrize('name', ['view', 'team_type'])
+def test_token_without_view_and_team_type_is_accepted(client, make_token, name):
+    assert client.get('/me', headers=bearer(make_token(omit=[name]))).status_code == 200
+
+
+def test_current_user_has_no_level_view_or_team_type():
     from dataclasses import fields
 
     from referoom_common import CurrentUser
 
-    assert 'level' not in {f.name for f in fields(CurrentUser)}
+    assert not {'level', 'view', 'team_type'} & {f.name for f in fields(CurrentUser)}
 
 
 def test_cookie_fallback(client, make_token):
@@ -105,8 +120,7 @@ def test_invalid_jwt(client, make_token, kind):
 
 
 @pytest.mark.parametrize('name', [
-    'iss', 'sub', 'username', 'role', 'team_id', 'team_type',
-    'view', 'iat', 'exp',
+    'iss', 'sub', 'username', 'role', 'team_id', 'iat', 'exp',
 ])
 def test_missing_claim(client, make_token, name):
     assert_error(client.get('/me', headers=bearer(make_token(omit=[name]))),
@@ -116,10 +130,9 @@ def test_missing_claim(client, make_token, name):
 @pytest.mark.parametrize('changes', [
     {'sub': '0'}, {'sub': '-1'}, {'sub': 'abc'}, {'sub': 101},
     {'sub': str(1 << 63)}, {'username': ' '}, {'username': None},
-    {'role': 'admin'}, {'view': 'all'},
+    {'role': 'admin'},
     {'team_id': True}, {'team_id': 0}, {'team_id': -1},
-    {'team_id': '7'}, {'team_id': 1 << 63}, {'team_type': 'other'},
-    {'team_id': None}, {'team_type': None},
+    {'team_id': '7'}, {'team_id': 1 << 63},
     {'iat': True}, {'iat': '123'}, {'exp': '9999999999'},
     {'iat': None}, {'exp': None}, {'iat': 100.5}, {'exp': 9999999999.5},
 ])
@@ -152,8 +165,7 @@ def test_invalid_cookie_token(client, make_token, expired):
     ('/admin', 'team_admin', 7, 200, None),
 ])
 def test_team_and_admin_permissions(client, make_token, route, role, team_id, expected, code):
-    token = make_token({'role': role, 'team_id': team_id,
-                        'team_type': 'dev' if team_id else None})
+    token = make_token({'role': role, 'team_id': team_id})
     response = client.get(route, headers=bearer(token))
     if code:
         assert_error(response, expected, code)
