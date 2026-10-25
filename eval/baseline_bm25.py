@@ -5,7 +5,6 @@ from pathlib import Path
 import re
 import unicodedata
 
-from rank_bm25 import BM25Okapi
 
 
 def tokenize(text: str) -> list[str]:
@@ -62,6 +61,7 @@ class BM25Baseline:
         if not self.documents:
             raise ValueError("Corpus has no searchable text")
         self.tokens = [tokenize(document["text"]) for document in self.documents]
+        from rank_bm25 import BM25Okapi  # BM25를 실제로 쓸 때만 필요하다(질문 검증·재집계·테스트에는 필요 없다)
         self.index = BM25Okapi(self.tokens)
 
     def search(self, question: str, k: int = 5) -> list[dict]:
