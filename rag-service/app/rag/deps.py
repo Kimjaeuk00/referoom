@@ -10,6 +10,6 @@ from app.rag import config_rag
 if config_rag.STORE_BACKEND == "local":
     from app.rag.local_store import store
 else:
-    from app.rag import store_stub as store  # TODO(data): from app.data import store
+    from app.rag import store_stub as store
 
 __all__ = ["store", "require_team", "CurrentUser"]
