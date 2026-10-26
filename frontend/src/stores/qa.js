@@ -16,16 +16,16 @@ const MODE_KEY = 'referoom.mode' // 마지막으로 고른 모드만 기억한�
 function loadMode() {
   try {
     const saved = localStorage.getItem(MODE_KEY)
-    return isMode(saved) ? saved : 'tutor'
+    return isMode(saved) ? saved : 'prior' // 처음 열면 연구 모드가 켜진 상태(선행연구)다. 끄고 나간 사람은 튜터로 기억된다
   } catch {
-    return 'tutor' // 저장소가 막혀 있어도 튜터로 동작한다
+    return 'prior' // 저장소가 막혀 있어도 기본값(연구 모드 켜짐)으로 동작한다
   }
 }
 
 export const useQaStore = defineStore('qa', () => {
   const turns = ref([])
   const scope = ref({ type: 'all' }) // { type: 'all' } | { type: 'tag', tags } | { type: 'paper', ids }
-  const mode = ref(loadMode()) // tutor | prior | topic | verify. tutor가 기본이고, 연구 모드를 켜면 나머지 셋 중 하나다
+  const mode = ref(loadMode()) // tutor | prior | topic | verify. 기본은 연구 모드가 켜진 prior이고, 스위치를 끄면 tutor다
   const lastResearch = ref(CHIP_MODES.includes(mode.value) ? mode.value : 'prior') // 연구 모드를 다시 켤 때 돌아갈 모드
   const priorScope = ref([]) // 선행연구에서 수집한 논문 id. 새로고침하면 사라진다
   const libraryOnly = ref(false) // 선행연구에서 논문을 새로 찾지 않고 라이브러리 안에서만 찾기
