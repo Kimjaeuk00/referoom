@@ -3,11 +3,10 @@ import { computed, ref } from 'vue'
 import { renderMarkdown } from '@/lib/markdown'
 import { toast } from '@/composables/useToast'
 import Icon from '@/components/common/Icon.vue'
-import ReviewBadge from './ReviewBadge.vue'
 import SourceList from './SourceList.vue'
 import VerifyTable from './VerifyTable.vue'
 
-// 검증 결과: 경고 → 대조표 → 비교 문장 초안 → 검토 안내 → 근거 목록. 수치를 다루므로 검토 안내는 항상 보인다.
+// 검증 결과: 경고 → 대조표 → 비교 문장 초안 → 근거 목록. 수치를 다루므로 근거 상자의 확인 안내는 항상 보인다.
 const props = defineProps({
   result: { type: Object, required: true }, // { claims, draft, warnings, sources, source_details, needs_review, handoff }
   params: { type: Object, default: () => ({}) },
@@ -67,8 +66,7 @@ async function copyDraft() {
       <p class="hint">AI가 쓴 초안이에요. 논문에 넣기 전에 원문과 대조하세요.</p>
     </section>
 
-    <ReviewBadge text="" :sources="details" />
-    <SourceList v-if="details.length" :items="details" :fallback="result.sources ?? []" :active="active" />
+    <SourceList v-if="details.length" :items="details" :fallback="result.sources ?? []" :active="active" needs-review />
   </div>
 </template>
 

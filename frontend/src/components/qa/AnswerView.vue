@@ -3,7 +3,6 @@ import { computed, ref } from 'vue'
 import { renderMarkdown } from '@/lib/markdown'
 import { canReask, reaskLevel } from '@/lib/levels'
 import SourceList from './SourceList.vue'
-import ReviewBadge from './ReviewBadge.vue'
 import HandoffNotice from './HandoffNotice.vue'
 import Icon from '@/components/common/Icon.vue'
 import { toast } from '@/composables/useToast'
@@ -48,9 +47,8 @@ const depth = computed(() => props.params.level ?? null) // 지금 답변의 깊
   <HandoffNotice v-if="isHandoff" @add-paper="emit('add-paper')" @ask-team="emit('ask-team')" />
   <div v-else class="answer">
     <div ref="prose" class="prose" @click="onBodyClick" v-html="html" />
-    <ReviewBadge v-if="result.needs_review" :text="result.answer" :sources="details" />
     <slot name="after-body" />
-    <SourceList :items="details" :fallback="result.sources ?? []" :active="active" />
+    <SourceList :items="details" :fallback="result.sources ?? []" :active="active" :needs-review="!!result.needs_review" />
     <div class="reask" role="group" aria-label="이 답변으로 할 수 있는 일">
       <template v-if="reaskable">
         <button type="button" class="btn" :disabled="busy || !canReask(depth, 'easier')" @click="emit('reask', { level: reaskLevel(depth, 'easier') })">더 쉽게</button>
