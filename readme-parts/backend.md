@@ -27,7 +27,7 @@ RAG·데이터·음성·프론트 코드의 연결은 각 담당자가 진행한
 
 **주요 구현 선택**
 
-- 원본 `SimpleAuthServer.java`는 참고본으로 유지하고 실행 진입점은 `workplace.AuthServerApplication`을 사용한다.
+- 실행 진입점은 `workplace.AuthServerApplication`(Spring Boot)이다. 예전 단일 파일 서버(`SimpleAuthServer`)와 DB 연결 예제(`DbExample`)는 삭제했다(git 이력에 있다).
 - Spring Boot `4.0.8`, Gradle Wrapper `9.0.0`, MariaDB JDBC `3.5.6`, springdoc `3.0.3`을 사용한다. Java 소스·타깃 설정은 17이며, 현재 실행·Docker 검증 환경은 JDK/JRE 21이다.
 - Controller → Service → Repository/JPA 구조이며 DTO·엔티티 변환 빌더는 Converter에 둔다. Enum은 `@Enumerated(EnumType.STRING)`으로 저장한다.
 - Python 3.11 이상, FastAPI, PyJWT를 사용한다. 공통 모듈은 Whisper·LLM SDK·Uvicorn·FFmpeg를 설치하거나 실행하지 않는다.
@@ -103,7 +103,7 @@ bash ./gradlew clean build --no-configuration-cache
 java -jar app/build/libs/app-0.0.1-SNAPSHOT.jar
 ```
 
-현재 Java 전용 자동 테스트 코드는 없다. Gradle 빌드 성공과 실제 API·DB·브라우저 연동 검증은 구분한다. 구형 `SimpleAuthServer`나 DB 예제 실행 작업을 Spring Boot 실행 명령 대신 사용하지 않는다.
+현재 Java 전용 자동 테스트 코드는 없다. Gradle 빌드 성공과 실제 API·DB·브라우저 연동 검증은 구분한다. Spring Boot 실행 명령(`./gradlew :app:bootRun`)만 쓴다.
 
 ### 4. DB 최초 초기화와 시드
 

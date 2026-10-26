@@ -59,9 +59,3 @@ dependencies {
 springBoot {
     mainClass = 'workplace.AuthServerApplication'
 }
-
-// 기존 DB 예제 개별 실행 작업 유지
-tasks.register('runDbExample', JavaExec) {
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'workplace.DbExample'
-}
