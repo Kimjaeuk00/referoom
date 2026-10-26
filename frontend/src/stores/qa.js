@@ -53,8 +53,8 @@ export const useQaStore = defineStore('qa', () => {
   // 주제·검증의 대상 논문 = 왼쪽 목록에서 고른 논문
   const pickedIds = computed(() => (scope.value.type === 'paper' ? scope.value.ids : []))
 
-  // 선행연구는 조사 범위가 없으면 질문을 보내기 전에 논문부터 찾아 모은다
-  const needsCollect = computed(() => mode.value === 'prior' && !libraryOnly.value && priorScope.value.length === 0)
+  // 선행연구는 조사 범위(왼쪽에서 체크한 논문이나 수집한 논문)가 없으면 질문을 보내기 전에 논문부터 찾아 모은다
+  const needsCollect = computed(() => mode.value === 'prior' && !libraryOnly.value && pickedIds.value.length === 0 && priorScope.value.length === 0)
 
   function request(turn) {
     const { mode: m = 'tutor', scope: s, level, paperIds, priorIds } = turn.params
@@ -81,8 +81,9 @@ export const useQaStore = defineStore('qa', () => {
 
   function ask(question, params) {
     if (busy.value) return null
+    // 체크한 논문이 있으면 예전에 수집한 범위보다 체크한 논문이 우선이라 priorIds를 비운다
     // 보낸 뒤에 모드를 바꿔도 이 질문은 그대로이도록, 모드와 대상 논문을 질문에 박아 둔다
-    const fixed = { mode: mode.value, paperIds: [...pickedIds.value], priorIds: libraryOnly.value ? [] : [...priorScope.value], ...params }
+    const fixed = { mode: mode.value, paperIds: [...pickedIds.value], priorIds: libraryOnly.value || pickedIds.value.length ? [] : [...priorScope.value], ...params }
     // 원고는 이 세션의 메모리에만 두고 어디에도 저장하지 않는다. '다시 시도'에 필요해서 turn.manuscript에 보관한다.
     const isVerify = fixed.mode === 'verify'
     const turn = reactive({ id: ++seq, question: isVerify ? manuscriptPreview(question) : question, manuscript: isVerify ? question : undefined, params: fixed, askedAt: new Date(), status: 'loading', slow: false, result: null, error: null })

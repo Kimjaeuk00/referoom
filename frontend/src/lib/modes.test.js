@@ -42,6 +42,9 @@ test('buildRequest: 선행연구는 수집한 논문이 있으면 그것으로 �
   const body = buildRequest('prior', { question: '비교', scope, priorIds: ['41', 42] }).body
   assert.deepEqual(body.scope, { type: 'paper', ids: [41, 42] })
   assert.equal(body.mode, 'prior')
+  // 스토어는 체크한 논문이 있으면 priorIds를 비운다: 그때는 체크한 논문(scope)이 그대로 범위다
+  const picked = { type: 'paper', ids: [1, 2] }
+  assert.deepEqual(buildRequest('prior', { question: '비교', scope: picked, priorIds: [] }).body.scope, picked)
   assert.equal(buildRequest('tutor', { question: '질문', scope, priorIds: [1] }).body.scope, scope) // 튜터는 priorIds를 쓰지 않는다
 })
 
