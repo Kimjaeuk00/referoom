@@ -87,6 +87,15 @@ class ManagerTests(unittest.TestCase):
         self.assertEqual(env["JWT_SECRET"], "test-jwt-secret")
         self.assertEqual(env["OPENAI_API_KEY"], "local-secret")
 
+    def test_rag_uses_the_real_local_index_unless_told_otherwise(self):
+        (self.root / "rag-service").mkdir()
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("RAG_STORE", None)
+            self.assertEqual(m.service_env(self.root, "rag")["RAG_STORE"], "local")
+            (self.root / "rag-service/.env").write_text("RAG_STORE=stub\n")
+            self.assertEqual(m.service_env(self.root, "rag")["RAG_STORE"], "stub")  # 직접 정한 값이 우선
+            self.assertNotIn("RAG_STORE", m.service_env(self.root, "voice"))  # 다른 서비스에는 넣지 않는다
+
     def test_redacts_secrets_and_bearer(self):
         (self.root / ".env").write_text('OPENAI_API_KEY=test-api-secret\n')
         text = m.redactor(self.root)('test-api-secret test-jwt-secret Bearer abc.def.ghi')

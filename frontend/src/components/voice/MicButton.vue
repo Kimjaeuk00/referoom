@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { api, TIMEOUT } from '@/api/client'
 import { errorText } from '@/api/errors'
-import { audioFileName, MAX_RECORD_SECONDS, micErrorText, useRecorder } from '@/lib/voice'
+import { audioFileName, BAR_WEIGHTS, barPx, MAX_RECORD_SECONDS, micErrorText, micFeedback, useRecorder } from '@/lib/voice'
 import Icon from '@/components/common/Icon.vue'
 
 // 눌러서 녹음 → 다시 누르면 POST /stt → 인식한 문장을 transcript로 넘긴다(Q&A 입력창에 채움, DEV_04 7절)
@@ -17,6 +17,9 @@ const recorder = useRecorder()
 const recognizing = ref(false)
 const error = ref('')
 const recording = computed(() => recorder.state.value === 'recording')
+// 녹음 중 입력 음량 상태: 소리가 실제로 들어오는지 버튼 옆에 보여 준다. 음량을 못 재는 환경에서는 '녹음 중'만 보인다
+const feedback = computed(() => (recorder.meterOn.value ? micFeedback({ speaking: recorder.speaking.value, silentMs: recorder.silentMs.value }) : 'unknown'))
+const LIVE_TEXT = { hearing: '인식 중이에요', waiting: '말씀해 주세요', quiet: '소리가 들리지 않아요. 마이크를 확인해 주세요', unknown: '녹음 중이에요' }
 let limit = null
 
 async function toggle() {
@@ -66,12 +69,18 @@ onBeforeUnmount(() => {
       <Icon v-if="props.compact" name="mic" />
       <template v-else>{{ recognizing ? '알아듣는 중' : recording ? '말하기 끝' : '말로 묻기' }}</template>
     </button>
+    <!-- 마이크 버튼 위 말풍선: 녹음 중에는 입력 음량과 목소리 유무, 녹음을 마친 뒤에는 인식 중임을 보여 준다 -->
+    <span v-if="recording || recognizing" class="live" :class="recognizing ? 'busy' : feedback" :role="!recognizing && feedback === 'quiet' ? 'alert' : 'status'">
+      <span v-if="recording && recorder.meterOn.value" class="bars" aria-hidden="true"><i v-for="(w, n) in BAR_WEIGHTS" :key="n" :style="{ height: barPx(recorder.level.value, w, 20) + 'px' }" /></span>
+      {{ recognizing ? '알아듣는 중이에요…' : LIVE_TEXT[feedback] }}
+    </span>
     <span v-if="error" class="field-error" role="alert">{{ error }}</span>
   </span>
 </template>
 
 <style scoped>
 .mic-wrap {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -103,6 +112,65 @@ onBeforeUnmount(() => {
 .rec:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* 마이크 버튼 위에 뜨는 말풍선 */
+.live {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 12px);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border: 1px solid var(--c-rule-strong);
+  border-radius: 12px;
+  background: var(--c-paper);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+  color: var(--c-ink-muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.live::after {
+  content: "";
+  position: absolute;
+  right: 14px;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  border-right: 1px solid var(--c-rule-strong);
+  border-bottom: 1px solid var(--c-rule-strong);
+  background: var(--c-paper);
+  transform: rotate(45deg);
+}
+
+.live .bars {
+  height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.live .bars i {
+  width: 4px;
+  border-radius: 2px;
+  background: var(--c-ink-muted);
+  transition: height 80ms linear;
+}
+
+.live.hearing {
+  color: var(--c-ok);
+}
+
+.live.hearing .bars i {
+  background: var(--c-ok);
+}
+
+.live.quiet {
+  color: var(--c-danger);
 }
 
 .rec.on {

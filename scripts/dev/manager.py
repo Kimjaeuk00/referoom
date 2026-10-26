@@ -78,6 +78,9 @@ def service_env(root, service):
         if value is not None:
             env[key] = value
     env.setdefault("RAG_URL", "http://localhost:8001")
+    if service == "rag":
+        # 개발 환경은 실제 색인(local)을 쓴다. 비워 두면 RAG가 가짜 저장소(stub)로 떠서 라이브러리 API가 503이 되고 답변도 가짜 자료로 나온다
+        env.setdefault("RAG_STORE", "local")
     return env
 
 

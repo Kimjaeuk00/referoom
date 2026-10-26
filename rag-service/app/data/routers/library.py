@@ -2,6 +2,8 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Response
+from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.data import ingest, repo
 from app.data.deps import require_admin, require_library
@@ -9,6 +11,7 @@ from app.data.providers.zotero import ZoteroError
 from app.data.schemas import LibraryStats, PaperList, PaperOut, PaperStatus, SourceType
 from app.rag.deps import CurrentUser
 from app.rag.errors import ApiError
+from app.rag.local_store import store
 
 router = APIRouter(tags=["라이브러리"])
 
@@ -41,6 +44,21 @@ async def get_paper(paper_id: int, user: CurrentUser = Depends(require_library))
     if row is None:
         raise NOT_FOUND
     return repo.public(row)
+
+
+@router.get("/papers/{paper_id}/file", summary="논문 원문 PDF (이 팀이 보관한 사본)", response_class=FileResponse,
+            responses={200: {"content": {"application/pdf": {}}, "description": "원본 PDF"}})
+async def get_paper_file(paper_id: int, user: CurrentUser = Depends(require_library)) -> FileResponse:
+    # 팀 폴더 안에서만 찾으므로 다른 팀의 논문은 파일이 없어 404다(존재 여부도 드러나지 않는다). Zotero는 부르지 않는다
+    path = await run_in_threadpool(store.pdf_path, user.team_id, paper_id)
+    if path is None:
+        raise NOT_FOUND
+    # 파일 이름은 고정값이다: 논문 제목이나 서버 경로가 응답에 나가지 않게 한다
+    return FileResponse(path, media_type="application/pdf", headers={
+        "Content-Disposition": 'inline; filename="paper.pdf"',
+        "Cache-Control": "private, max-age=300",
+        "X-Content-Type-Options": "nosniff",
+    })
 
 
 @router.delete("/papers/{paper_id}", status_code=204, summary="논문 삭제 (Zotero 휴지통으로 이동)")

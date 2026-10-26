@@ -1,0 +1,47 @@
+{
+  "claims": {
+    "VF01#1": {
+      "n": 5,
+      "distribution": {
+        "match": 5
+      },
+      "mode": "match",
+      "agreement": 1.0
+    },
+    "VF02#1": {
+      "n": 5,
+      "distribution": {
+        "condition_differs": 4,
+        "not_found": 1
+      },
+      "mode": "condition_differs",
+      "agreement": 0.8
+    },
+    "VF03#1": {
+      "n": 5,
+      "distribution": {
+        "not_found": 5
+      },
+      "mode": "not_found",
+      "agreement": 1.0
+    }
+  },
+  "claim_counts": {
+    "VF01": {
+      "1": 5
+    },
+    "VF02": {
+      "1": 5
+    },
+    "VF03": {
+      "1": 5
+    }
+  },
+  "errors": {
+    "VF01": 0,
+    "VF02": 0,
+    "VF03": 0
+  },
+  "repeat": 5,
+  "calls": 15
+}

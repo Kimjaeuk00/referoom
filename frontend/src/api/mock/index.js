@@ -211,6 +211,35 @@ function getPaper({ params, claims }) {
   return paper ? [200, publicPaper(paper)] : aiError(404, 'NOT_FOUND', '논문을 찾을 수 없습니다.')
 }
 
+// GET /papers/:id/file: 서버가 보관한 원문 PDF. 색인된 논문에만 파일이 있다(색인 전·실패는 404)
+// 글꼴 없이 영문만 쓰는 8쪽짜리 최소 PDF를 즉석에서 만든다. xref 위치를 맞춰 두어 브라우저 뷰어가 복구 없이 연다.
+function samplePdf(label, pages = 8) {
+  const objects = ['<< /Type /Catalog /Pages 2 0 R >>']
+  const kids = Array.from({ length: pages }, (_, i) => `${4 + i * 2} 0 R`).join(' ')
+  objects.push(`<< /Type /Pages /Kids [${kids}] /Count ${pages} >>`, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
+  for (let n = 1; n <= pages; n++) {
+    const text = `BT /F1 24 Tf 72 700 Td (${label} - page ${n} of ${pages}) Tj ET`
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${5 + (n - 1) * 2} 0 R >>`)
+    objects.push(`<< /Length ${text.length} >>\nstream\n${text}\nendstream`)
+  }
+  let out = '%PDF-1.4\n'
+  const offsets = objects.map((body, i) => {
+    const at = out.length
+    out += `${i + 1} 0 obj\n${body}\nendobj\n`
+    return at
+  })
+  const xref = out.length
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`
+  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`
+  return new Blob([out], { type: 'application/pdf' })
+}
+
+function getPaperFile({ params, claims }) {
+  const paper = findPaper(claims, params.id)
+  if (!paper || paper.status !== 'indexed') return aiError(404, 'NOT_FOUND', '논문을 찾을 수 없습니다.')
+  return [200, samplePdf(`Mock paper ${paper.id}`)]
+}
+
 function deletePaper({ params, claims }) {
   const paper = findPaper(claims, params.id)
   if (!paper) return aiError(404, 'NOT_FOUND', '논문을 찾을 수 없습니다.')
@@ -616,6 +645,7 @@ const ROUTES = [
   ['GET', 'rag', /^\/library\/stats$/, stats, 'team'],
   ['GET', 'rag', /^\/papers$/, listPapers, 'team'],
   ['GET', 'rag', /^\/papers\/(?<id>[^/]+)$/, getPaper, 'team'],
+  ['GET', 'rag', /^\/papers\/(?<id>[^/]+)\/file$/, getPaperFile, 'team'],
   ['DELETE', 'rag', /^\/papers\/(?<id>[^/]+)$/, deletePaper, 'team'],
   ['POST', 'rag', /^\/upload-paper$/, uploadPaper, 'team'],
   ['POST', 'rag', /^\/search-topic$/, searchTopic, 'team'],

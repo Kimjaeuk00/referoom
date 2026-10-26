@@ -6,6 +6,7 @@ export { speakable } from './format'
 // 녹음·재생 composable은 음성 담당 파일이다(composables/useRecorder.js, useAudioPlayer.js). 프론트는 가져다 쓰기만 하고,
 // 파일이 아직 없으면 음성 메뉴와 버튼을 숨긴다. 실제 파일의 모양이 달라지면 이 파일만 고치면 된다.
 //   useRecorder()    → { state: Ref<'idle'|'recording'|'processing'|'error'>, start(): Promise, stop(): Promise<Blob> }  (그대로 쓴다)
+//                       녹음 중에는 level(0~1)·speaking·silentMs·meterOn도 있다(입력 음량, lib/micLevel.js)
 //   원본 useAudioPlayer({ apiBlob, baseUrl }) → { state: Ref<'idle'|'loading'|'playing'|'error'>, play(경로|전체 주소), stop(), dispose() }
 //   화면에 내놓는 useAudioPlayer()            → 위에 playing(= state가 'playing') 을 더한 것. apiBlob(Bearer·401 처리)과 baseUrl은 여기서 넣어 준다.
 const modules = import.meta.glob(['../composables/useRecorder.js', '../composables/useAudioPlayer.js'], { eager: true })
@@ -19,6 +20,8 @@ export const useAudioPlayer = createPlayer
     }
   : null
 export const voiceAvailable = Boolean(useRecorder && useAudioPlayer)
+
+export { BAR_WEIGHTS, barPx, micFeedback } from './micLevel'
 
 export const MAX_RECORD_SECONDS = 60
 export const audioUrl = (path) => new URL(path, BASE_URL.voice).href

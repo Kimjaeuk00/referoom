@@ -252,4 +252,14 @@ http '다른 팀의 요약' 404 POST "$RAG_URL/summary" \
 check_json '다른 팀 요약 오류 코드' '.code == "NOT_FOUND"'
 
 printf '[PASS] 필수 API E2E 1~10단계 완료\n'
+
+# 11. 원문 PDF: 같은 팀은 PDF를 받고, 토큰이 없거나 다른 팀이면 받지 못해야 한다(존재 여부도 드러나지 않는다).
+http '11. 원문 PDF 무토큰 차단' 401 GET "$RAG_URL/papers/$E2E_PAPER_ID/file"
+http '11. 원문 PDF 내려받기' 200 GET "$RAG_URL/papers/$E2E_PAPER_ID/file" --header "@$WORK_DIR/primary.headers"
+[[ "$(head -c 5 "$BODY")" == '%PDF-' ]] || fail '11. 원문 PDF 응답이 PDF 형식이 아닙니다'
+pass '원문 PDF 본문이 %PDF로 시작'
+http '다른 팀의 원문 PDF' 404 GET "$RAG_URL/papers/$E2E_PAPER_ID/file" --header "@$WORK_DIR/other.headers"
+check_json '다른 팀 원문 PDF 오류 코드' '.code == "NOT_FOUND"'
+
+printf '[PASS] 필수 API E2E 1~11단계 완료\n'
 printf '[INFO] 브라우저 화면·답변 의미 정확성·LLM 미호출 로그·선택 음성은 별도 확인\n'
