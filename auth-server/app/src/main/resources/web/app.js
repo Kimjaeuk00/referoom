@@ -1,1 +1,0 @@
-console.log("Auth demo page loaded");
