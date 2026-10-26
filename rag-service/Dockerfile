@@ -22,7 +22,7 @@ COPY rag-service/requirements-data.txt rag-service/requirements-rag.txt ./
 RUN sed '/^[[:space:]]*-e[[:space:]]*\.\.\/common-py/d' requirements-rag.txt > /tmp/requirements-rag.txt \
  && uv pip install --no-cache --torch-backend=cpu --python /opt/venv/bin/python -r requirements-data.txt -r /tmp/requirements-rag.txt /opt/referoom-common \
  && uv pip check --python /opt/venv/bin/python \
- && python -c "import referoom_common, faiss, pypdfium2, sentence_transformers" \
+ && python -c "import referoom_common, pypdfium2, sentence_transformers" \
  && rm /tmp/requirements-rag.txt
 
 RUN groupadd --gid 10001 app \
