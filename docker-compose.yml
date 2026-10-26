@@ -1,0 +1,172 @@
+# 아키텍처/API 명세 기준: 인증 서버만 MariaDB에 접근한다.
+name: referoom
+
+services:
+  db:
+    image: mariadb:11
+    environment:
+      # 동일한 DB_PASSWORD를 DB 초기화와 인증 서버 접속에 사용한다.
+      MARIADB_ROOT_PASSWORD: "${DB_PASSWORD:?DB_PASSWORD must be set in root .env}"
+      MARIADB_ROOT_HOST: "%"
+      MARIADB_DATABASE: "${DB_NAME:-sql_db}"
+    # DB는 내부 네트워크에서만 접근하며 호스트 포트를 공개하지 않는다.
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./db/migrations/001_users.sql:/docker-entrypoint-initdb.d/001_users.sql:ro
+      - ./db/migrations/002_teams_users.sql:/docker-entrypoint-initdb.d/002_teams_users.sql:ro
+      - ./db/migrations/003_drop_view_and_team_type.sql:/docker-entrypoint-initdb.d/003_drop_view_and_team_type.sql:ro
+    # 최초 빈 볼륨에서 스키마만 초기화한다. 900 개발용 시드는 자동 실행하지 않는다.
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 12
+    restart: unless-stopped
+
+  auth:
+    build:
+      context: .
+      dockerfile: auth-server/Dockerfile
+    ports:
+      - "127.0.0.1:${AUTH_PORT:-8080}:8080"
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: "${DB_NAME:-sql_db}"
+      DB_USER: root  # 위 MariaDB 초기화 계정과 일치
+      DB_PASSWORD: "${DB_PASSWORD:?DB_PASSWORD must be set in root .env}"
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET must be set in root .env}"
+      FRONTEND_URL: "${FRONTEND_URL:-http://localhost:5174}"
+      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-http://localhost:5174,http://localhost:8008}"
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -ec
+        - |
+          exec 3<>/dev/tcp/127.0.0.1/8080
+          printf 'GET /api/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3
+          grep -q '"db":"up"' <&3
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 12
+    restart: unless-stopped
+
+  rag:
+    build:
+      context: .
+      dockerfile: rag-service/Dockerfile
+    ports:
+      - "127.0.0.1:${RAG_PORT:-8001}:8001"
+    environment:
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET must be set in root .env}"
+      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-http://localhost:5174,http://localhost:8008}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      LLM_API_KEY: "${LLM_API_KEY:-}"
+      LLM_BASE_URL: "${LLM_BASE_URL:-https://api.openai.com/v1}"
+      LLM_MODEL: "${LLM_MODEL:-gpt-4o}"
+      LLM_TEMPERATURE: "${LLM_TEMPERATURE:-0.3}"
+      LLM_REASONING_EFFORT: "${LLM_REASONING_EFFORT:-}"
+      LLM_IMAGE_MODEL: "${LLM_IMAGE_MODEL:-}"
+      LLM_IMAGE_REASONING_EFFORT: "${LLM_IMAGE_REASONING_EFFORT:-}"
+      RAG_STORE: local
+      EMBEDDING_BACKEND: "${EMBEDDING_BACKEND:-local}"
+      EMBEDDING_MODEL: "${EMBEDDING_MODEL:-BAAI/bge-m3}"
+      LOCAL_TEAM_ID: "${LOCAL_TEAM_ID:-3}"
+      LOCAL_INDEX_DIR: /home/app/data/local_index
+      PDF_DIR: /home/app/data/pdfs
+      HF_HOME: /home/app/.cache/huggingface
+      ZOTERO_GROUP_ID: "${ZOTERO_GROUP_ID:-}"
+      ZOTERO_API_KEY: "${ZOTERO_API_KEY:-}"
+      ZOTERO_TEAM_ID: "${ZOTERO_TEAM_ID:-}"
+      ZOTERO_CACHE_SECONDS: "${ZOTERO_CACHE_SECONDS:-30}"
+      PAGE_IMAGES: "${PAGE_IMAGES:-off}"
+      PAGE_IMAGES_ON_REFUSAL: "${PAGE_IMAGES_ON_REFUSAL:-off}"
+      PAGE_IMAGE_MAX: "${PAGE_IMAGE_MAX:-2}"
+      RATE_LIMIT_CALLS: "${RATE_LIMIT_CALLS:-0}"
+      RATE_LIMIT_WINDOW_SECONDS: "${RATE_LIMIT_WINDOW_SECONDS:-3600}"
+    # The existing image owns /home/app as UID 10001. A fresh named volume
+    # inherits that directory; application source remains in /app, outside it.
+    volumes:
+      - rag-home:/home/app
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8001/health',timeout=3)); assert d.get('status')=='ok' and d.get('embedder') is True"
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 12
+    restart: unless-stopped
+
+  voice:
+    build:
+      context: .
+      dockerfile: voice-service/Dockerfile
+    ports:
+      - "127.0.0.1:${VOICE_PORT:-8008}:8008"
+    environment:
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET must be set in root .env}"
+      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-http://localhost:5174,http://localhost:8008}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      WHISPER_MODEL: "${WHISPER_MODEL:-small}"
+      TTS_MODEL: "${TTS_MODEL:-tts-1}"
+      TTS_VOICE: "${TTS_VOICE:-nova}"
+      RAG_URL: http://rag:8001
+      HF_HOME: /home/app/.cache/huggingface
+    volumes:
+      - voice-data:/app/voice-service/data
+      - voice-model-cache:/home/app/.cache/huggingface
+    depends_on:
+      rag:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8008/health',timeout=3)); assert d.get('whisper')=='ready'"
+      interval: 15s
+      timeout: 5s
+      start_period: 180s
+      retries: 20
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_AUTH_URL: "${VITE_AUTH_URL:-http://localhost:8080}"
+        VITE_RAG_URL: "${VITE_RAG_URL:-http://localhost:8001}"
+        VITE_VOICE_URL: "${VITE_VOICE_URL:-http://localhost:8008}"
+        VITE_USE_MOCK: "false"
+    ports:
+      - "127.0.0.1:${WEB_PORT:-5174}:80"
+    depends_on:
+      auth:
+        condition: service_healthy
+      rag:
+        condition: service_healthy
+      voice:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  rag-home:
+  voice-data:
+  voice-model-cache:
