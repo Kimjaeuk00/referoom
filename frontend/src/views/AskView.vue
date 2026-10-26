@@ -132,6 +132,16 @@ function closeCollect() {
   topicOpen.value = false
 }
 
+// 체크한 논문이 있어도 새 논문을 더 찾고 싶을 때: 입력한 질문이 있으면 모은 뒤 이어서 보낸다
+function collectMore() {
+  if (trimmed.value) {
+    qa.priorPending = trimmed.value
+    question.value = ''
+  } else {
+    topicOpen.value = true
+  }
+}
+
 async function onCollected(ids) {
   const pending = qa.priorPending
   if (!pending) return
@@ -141,7 +151,9 @@ async function onCollected(ids) {
     toast('수집된 논문이 없어요. 다른 검색어로 다시 찾아 보세요.', { tone: 'error' })
     return
   }
-  qa.priorScope = ids
+  // 체크한 논문이 있으면 새로 모은 논문을 거기에 더해, 왼쪽 체크가 곧 조사 범위가 되게 한다
+  if (pickedIds.value.length) pickedIds.value = [...new Set([...pickedIds.value, ...ids.map(Number)])]
+  else qa.priorScope = ids
   const turn = qa.ask(pending, { scope: qa.scope })
   if (!turn) return
   await nextTick()
@@ -266,7 +278,7 @@ function turnState(turn) {
           <ResearchToggle :model-value="qa.researchOn" :disabled="qa.busy" @update:model-value="qa.setResearch" />
           <ModeChips v-if="qa.researchOn" :model-value="qa.mode" @update:model-value="qa.setMode" />
         </div>
-        <PriorScopeBar v-if="qa.mode === 'prior'" />
+        <PriorScopeBar v-if="qa.mode === 'prior'" @collect="collectMore" />
       </div>
 
       <div ref="thread" class="thread" aria-live="polite">
