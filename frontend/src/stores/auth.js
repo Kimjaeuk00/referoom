@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api } from '@/api/client'
 import { decodeJwt, isExpired } from '@/lib/jwt'
+import { clearPdfCache } from '@/lib/paperPdf'
 
 // 토큰은 메모리(Pinia) + sessionStorage. 새로고침해도 유지되고 탭을 닫으면 사라진다(DEV_02 3.1).
 const STORAGE_KEY = 'referoom.accessToken'
@@ -39,9 +40,11 @@ export const useAuthStore = defineStore('auth', () => {
     if (data?.user) user.value = data.user
   }
 
+  // 로그아웃과 401(세션 만료)이 모두 거치는 곳: 이전 계정의 원문 PDF도 같이 버린다
   function clear() {
     setToken(null)
     user.value = null
+    clearPdfCache()
   }
 
   async function login(username, password) {
