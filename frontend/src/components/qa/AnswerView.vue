@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { renderMarkdown } from '@/lib/markdown'
 import { canReask, reaskLevel } from '@/lib/levels'
 import SourceList from './SourceList.vue'
@@ -21,11 +21,11 @@ const hasSources = computed(() => details.value.length > 0 || (props.result.sour
 // 출처가 없는 답은 "출처 없음"으로 보여주지 않고 handoff로 처리한다(DEV_02 4.6)
 const isHandoff = computed(() => props.result.handoff || !hasSources.value)
 
-// Vorb처럼 답 아래 복사 아이콘. 화면에 보이는 글 그대로(수식·출처 표시 포함) 복사한다.
-const prose = ref(null)
+// Vorb처럼 답 아래 복사 아이콘. 근거 라벨([S1] 등)은 빼고 답변 원문만 복사한다.
 async function copyAnswer() {
   try {
-    await navigator.clipboard.writeText(prose.value?.innerText ?? props.result.answer)
+    const text = props.result.answer.replace(/[ \t]*\[S\d{1,3}\]/g, '')
+    await navigator.clipboard.writeText(text)
     toast('답변을 복사했어요.')
   } catch {
     toast('복사하지 못했어요. 글을 직접 선택해 복사하세요.', { tone: 'error' })
@@ -46,7 +46,7 @@ const depth = computed(() => props.params.level ?? null) // 지금 답변의 깊
 <template>
   <HandoffNotice v-if="isHandoff" @add-paper="emit('add-paper')" @ask-team="emit('ask-team')" />
   <div v-else class="answer">
-    <div ref="prose" class="prose" @click="onBodyClick" v-html="html" />
+    <div class="prose" @click="onBodyClick" v-html="html" />
     <slot name="after-body" />
     <SourceList :items="details" :fallback="result.sources ?? []" :active="active" :needs-review="!!result.needs_review" />
     <div class="reask" role="group" aria-label="이 답변으로 할 수 있는 일">
