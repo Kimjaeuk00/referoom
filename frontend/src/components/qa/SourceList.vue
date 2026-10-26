@@ -10,6 +10,7 @@ const props = defineProps({
   items: { type: Array, default: () => [] }, // source_details: { label, paper_id, title, page, url, snippet }
   fallback: { type: Array, default: () => [] }, // sources: "논문명 p.N" 문자열(상세가 없을 때만)
   active: { type: Object, default: null }, // { label, n } 본문에서 누른 근거
+  needsReview: { type: Boolean, default: false }, // 수식·수치가 있거나 근거가 약한 답: 제목 아래에 확인 안내 한 줄
 })
 
 const uid = useId()
@@ -35,6 +36,7 @@ watch(
     <Icon name="forward" />
     <div>
       <h3 :id="`${uid}-title`" class="section-label">근거 {{ items.length || fallback.length }}건</h3>
+      <p v-if="needsReview" class="review-hint">수치·수식은 원문과 한 번 확인해 보세요.</p>
       <ol v-if="items.length" class="list">
         <li v-for="s in items" :id="`${uid}-${s.label}`" :key="s.label" tabindex="-1" :class="{ on: current === s.label }">
           <span class="ref" :data-tone="toneOfLabel(s.label)">{{ s.label }}</span>
@@ -66,6 +68,12 @@ watch(
 </template>
 
 <style scoped>
+.review-hint {
+  margin: 2px 0 0;
+  color: var(--c-ink-muted);
+  font-size: var(--fs-xs);
+}
+
 .list {
   margin: 8px 0 0;
   padding: 0;

@@ -1,7 +1,6 @@
 <script setup>
 import { computed } from 'vue'
 import Icon from '@/components/common/Icon.vue'
-import ReviewBadge from './ReviewBadge.vue'
 import SourceList from './SourceList.vue'
 import TopicCards from './TopicCards.vue'
 import CiteChip from './CiteChip.vue'
@@ -44,8 +43,7 @@ const isHandoff = computed(() => props.result.handoff || !topics.value.length)
     </details>
     <TopicCards :topics="topics" @cite="emit('cite', $event)" />
     <p class="notice hint">AI가 제안한 후보예요. 라이브러리 밖의 신규성은 보증하지 않아요. 쓰기 전에 직접 확인하세요.</p>
-    <ReviewBadge v-if="result.needs_review" text="" :sources="details" />
-    <SourceList :items="details" :fallback="result.sources ?? []" :active="active" />
+    <SourceList :items="details" :fallback="result.sources ?? []" :active="active" :needs-review="!!result.needs_review" />
   </div>
 </template>
 
