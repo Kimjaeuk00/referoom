@@ -18,7 +18,7 @@ from app.rag.context import Block, build_blocks, details_of, render_context, sou
 from app.rag.deps import CurrentUser, store
 from app.rag.modes import adopt_block, clean_text, gather_evidence, map_safe
 from app.rag.prompts import (
-    TOPIC_LIMIT_PROMPT, TOPIC_LIMIT_QUERIES, TOPIC_LIMIT_USER, TOPIC_PERSPECTIVES, TOPIC_SUGGEST_PROMPT, TOPIC_SUGGEST_USER, VIEW_RULES,
+    TOPIC_LIMIT_PROMPT, TOPIC_LIMIT_QUERIES, TOPIC_LIMIT_USER, TOPIC_PERSPECTIVES, TOPIC_SUGGEST_PROMPT, TOPIC_SUGGEST_USER, ANSWER_STYLE,
 )
 from app.rag.schemas import (
     Experiment, Limitation, LimitationDraft, SimilarPaper, TopicCandidate, TopicDraft, TopicRequest, TopicResponse,
@@ -54,9 +54,9 @@ def _limitations(blocks: list[Block], draft: LimitationDraft, used: list[Block])
     return out
 
 
-def _suggest(limitations: list[Limitation], req: TopicRequest, view: str) -> tuple[TopicDraft, int, int]:
+def _suggest(limitations: list[Limitation], req: TopicRequest) -> tuple[TopicDraft, int, int]:
     perspectives = "\n".join(f"- {key}: {text}" for key, text in TOPIC_PERSPECTIVES.items())
-    system = TOPIC_SUGGEST_PROMPT.format(n=req.n, perspectives=perspectives, view_rules=VIEW_RULES[view])
+    system = TOPIC_SUGGEST_PROMPT.format(n=req.n, perspectives=perspectives, answer_style=ANSWER_STYLE)
     lines = [
         f"- [{lim.label}] 《{lim.title}》{f' p.{lim.page}' if lim.page is not None else ''}: {lim.summary}"
         for lim in limitations
@@ -117,7 +117,6 @@ def _similar(team_id: int, topic: TopicCandidate, others: list[int]) -> list[Sim
 
 def run(req: TopicRequest, user: CurrentUser, usage: dict | None = None) -> TopicResponse:
     started = time.monotonic()
-    view = req.view or user.view or "dev"
     in_tok = out_tok = 0
     used: list[Block] = []
     limitations: list[Limitation] = []
@@ -142,7 +141,7 @@ def run(req: TopicRequest, user: CurrentUser, usage: dict | None = None) -> Topi
 
     topics: list[TopicCandidate] = []
     if limitations:
-        draft, i, o = _suggest(limitations, req, view)  # 실패하면 후보가 없으므로 오류로 응답한다
+        draft, i, o = _suggest(limitations, req)  # 실패하면 후보가 없으므로 오류로 응답한다
         in_tok, out_tok = in_tok + i, out_tok + o
         topics = _candidates(draft, {lim.label for lim in limitations}, req.n)
         others = [pid for pid in indexed if pid not in set(ids)]
@@ -152,10 +151,10 @@ def run(req: TopicRequest, user: CurrentUser, usage: dict | None = None) -> Topi
     if topics:
         resp = TopicResponse(
             limitations=limitations, topics=topics, sources=source_strings(used), source_details=details_of(used),
-            needs_review=True, handoff=False, view=view, latency_ms=0,
+            needs_review=True, handoff=False, latency_ms=0,
         )
     else:
-        resp = TopicResponse(handoff=True, view=view, latency_ms=0)
+        resp = TopicResponse(handoff=True, latency_ms=0)
 
     if usage is not None:
         usage["in_tok"], usage["out_tok"] = in_tok, out_tok

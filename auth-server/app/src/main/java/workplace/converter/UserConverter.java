@@ -54,7 +54,6 @@ public final class UserConverter {
             .username(user.getUsername())
             .displayName(user.getDisplayName())
             .role(user.getRole())
-            .view(user.getEffectiveView())
             .team(TeamConverter.toTeamInfoDTO(user.getTeam()))
             .build();
     }

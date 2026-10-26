@@ -166,6 +166,22 @@ def paper_chunk_counts(team_id: int) -> dict[int, int]:
     return counts
 
 
+_titles_cache: dict[int, tuple[int, dict[int, str]]] = {}
+
+
+def paper_titles(team_id: int) -> dict[int, str]:
+    """논문 id → 제목(청크 메타데이터의 source). 색인이 바뀌면(meta.json 수정 시각) 다시 만든다."""
+    idx = _load(team_id)
+    if idx is None:
+        return {}
+    cached = _titles_cache.get(team_id)
+    if cached and cached[0] == idx.stamp:
+        return cached[1]
+    titles = {int(c["metadata"]["paper_id"]): str(c["metadata"].get("source", "")) for c in idx.chunks if "paper_id" in c["metadata"]}
+    _titles_cache[team_id] = (idx.stamp, titles)
+    return titles
+
+
 def paper_ids_with_meta(team_id: int, field: str) -> set[int]:
     """청크 메타데이터에 `field`가 있는 논문 id. 어떤 경로로 색인했는지 구분할 때 쓴다
     (예: zotero_key가 있으면 Zotero 동기화로 색인한 논문)."""

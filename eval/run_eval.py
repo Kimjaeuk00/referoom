@@ -28,7 +28,7 @@ JUDGE_METADATA_FIELDS = ["judge_in_tok", "judge_out_tok", "judge_latency_ms", "j
                          "judge_request_sha256", "judge_error_code"]
 FIELDS = ["id", "type", "mode", "status", "http_status", "handoff", "needs_review", "review_pass", "grounded",
           "refusal_pass", "bm25_hit_at_k", "latency_ms", "client_latency_ms",
-          "in_tok", "out_tok", "level", "view", "dataset_sha256", "response_sha256",
+          "in_tok", "out_tok", "level", "dataset_sha256", "response_sha256",
           "rubric_sha256", "judge_model", "judge_status", "accuracy", "hallucinated",
           "refusal_semantic_pass", "human_reviewed", "level_score", "math_correct",
           "mode_pass", "mode_detail", "context_sha256", "estimated_cost", "cost_currency"] + JUDGE_METADATA_FIELDS
@@ -215,7 +215,7 @@ def read_collection(path, questions):
         if row["id"] != _csv_cell(item["id"]) or row["type"] != item["type"] or row["mode"] != item["mode"] or row["dataset_sha256"] != fingerprint(questions):
             raise ValueError("Collection does not match questions")
         row["id"] = item["id"]
-        if row["level"] != item.get("level") or row["view"] != item["view"] or row["status"] not in {
+        if row["level"] != item.get("level") or row["status"] not in {
             "ok", "request_error", "http_error", "invalid_response",
         }:
             raise ValueError("Collection request metadata differs")
@@ -267,7 +267,7 @@ def load_questions(directory: Path) -> list[dict]:
                     raise ValueError
                 item.setdefault("mode", "tutor")
                 mode = item["mode"]
-                if mode not in mode_checks.MODES or item["view"] not in {"dev", "rnd"}:
+                if mode not in mode_checks.MODES:
                     raise ValueError
                 # level은 사용자 수준이 아니라 이번 질문의 요청 깊이(L1 더 쉽게, L3 더 깊게, L2 기본)다. tutor는 필수, 다른 모드는 생략 가능
                 if item.get("level", None if mode == "tutor" else "L2") not in {"L1", "L2", "L3"}:
@@ -327,7 +327,6 @@ def valid_response(body) -> bool:
     return (
         type(body.get("handoff")) is bool and type(body.get("needs_review")) is bool
         and isinstance(body.get("level"), str) and body["level"] in {"L1", "L2", "L3"}
-        and isinstance(body.get("view"), str) and body["view"] in {"dev", "rnd"}
         and _number(body.get("latency_ms"))
     )
 
@@ -360,7 +359,7 @@ def evaluate_questions(questions, client, base_url, token, top_k=5, baseline=Non
         mode = item["mode"]
         tutor = mode == "tutor"
         row = dict.fromkeys(FIELDS)
-        row.update(id=item["id"], type=item["type"], mode=mode, status="request_error", level=item.get("level"), view=item["view"],
+        row.update(id=item["id"], type=item["type"], mode=mode, status="request_error", level=item.get("level"),
                    dataset_sha256=fingerprint(questions), judge_status="not_applicable", accuracy=False,
                    human_reviewed=False)
         paper_ids = None
@@ -402,7 +401,7 @@ def evaluate_questions(questions, client, base_url, token, top_k=5, baseline=Non
         try:
             body = response.json()
             if mode in ("tutor", "prior"):
-                valid = valid_response(body) and body["view"] == item["view"] and (
+                valid = valid_response(body) and (
                     item.get("level") is None or body["level"] == item["level"])
                 valid = valid and (tutor or mode_checks.valid_mode_response(mode, body))
             else:

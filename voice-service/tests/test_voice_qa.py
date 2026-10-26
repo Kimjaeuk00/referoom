@@ -16,7 +16,7 @@ from app.services.speech_text import HANDOFF, LIMIT, NOTICE, make_speech_text
 def rag_body():
     return dict(answer='**LoRA**는 저랭크 행렬을 학습합니다 [S1].',sources=['LoRA p.1'],
                 source_details=[dict(label='S1',paper_id=41,title='LoRA',page=1,snippet='low rank')],
-                needs_review=False,handoff=False,level='L2',view='rnd',latency_ms=20,mode='tutor')
+                needs_review=False,handoff=False,level='L2',latency_ms=20,mode='tutor')
 
 
 @pytest.fixture
@@ -39,7 +39,7 @@ def ask(client,auth=None,**data):
 
 def test_complete_flow_forwarding_owner_audio_and_latency(qa,backend,auth):
     client,calls,state,app=qa
-    response=ask(client,{**auth,'X-Request-Id':'voice-qa-test'},source='pdf',scope=json.dumps({'type':'paper','ids':[41],'team_id':999}),view='dev',language='en',level='L1')
+    response=ask(client,{**auth,'X-Request-Id':'voice-qa-test'},scope=json.dumps({'type':'paper','ids':[41],'team_id':999}),view='dev',source='pdf',language='en',level='L1')
     assert response.status_code==200
     body=response.json()
     assert body['answer']==state['body']['answer'] and body['sources']==state['body']['sources']
@@ -52,7 +52,7 @@ def test_complete_flow_forwarding_owner_audio_and_latency(qa,backend,auth):
     assert request.headers['Authorization']==auth['Authorization']
     assert request.headers['X-Request-Id']=='voice-qa-test'
     sent=json.loads(request.content)
-    assert sent['question']=='LoRA 질문' and sent['view']=='dev' and sent['source']=='pdf'
+    assert sent['question']=='LoRA 질문' and 'view' not in sent and 'source' not in sent  # 예전 클라이언트가 보낸 view·source는 전달하지 않는다
     assert sent['scope']=={'type':'paper','ids':[41]} and sent['level']=='L1'
     assert 'team_id' not in sent and 'mode' not in sent
     assert request.extensions['timeout']['connect']==5 and request.extensions['timeout']['read']==30
@@ -62,14 +62,13 @@ def test_complete_flow_forwarding_owner_audio_and_latency(qa,backend,auth):
     assert list((app.state.audio_storage.directory/'12').glob('*.mp3'))
 
 
-def test_speak_false_has_no_tts_or_audio_and_uses_jwt_view(qa,backend,auth):
+def test_speak_false_has_no_tts_or_audio(qa,backend,auth):
     client,calls,state,app=qa
     response=ask(client,auth,speak='false')
     assert response.status_code==200
     body=response.json()
     assert body['audio_id'] is None and body['audio_url'] is None and body['latency_ms']['tts']==0
     assert body['speech_text'].endswith(NOTICE)
-    assert json.loads(calls[0].content)['view']=='rnd'
     backend[1].assert_not_called()
     assert not list(app.state.audio_storage.directory.glob('**/*.mp3'))
 
@@ -142,7 +141,7 @@ def test_redirect_not_followed_with_bearer(qa,backend,auth):
     assert response.status_code==502 and len(calls)==1
 
 
-@pytest.mark.parametrize('data',[{'scope':'bad json'},{'scope':'[]'},{'scope':'null'},{'scope':'{"type":"batch"}'},{'view':'other'},{'source':'other'},{'speak':'yes'},{'language':'other'},{'level':'other'}])
+@pytest.mark.parametrize('data',[{'scope':'bad json'},{'scope':'[]'},{'scope':'null'},{'scope':'{"type":"batch"}'},{'speak':'yes'},{'language':'other'},{'level':'other'}])
 def test_invalid_form_never_infers(qa,backend,auth,data):
     client,calls,state,app=qa
     response=ask(client,auth,**data)

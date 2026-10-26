@@ -1,41 +1,17 @@
 <script setup>
-import { onMounted, reactive, ref, watch } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api/client'
-import { errorText } from '@/api/errors'
 import { useAuthStore } from '@/stores/auth'
 import { useProfileStore } from '@/stores/profile'
 import { toast } from '@/composables/useToast'
 import { formatDateTime } from '@/lib/format'
-import { TEAM_TYPES } from '@/lib/levels'
-import ViewSelector from '@/components/common/ViewSelector.vue'
 
 const auth = useAuthStore()
 const profile = useProfileStore()
 const router = useRouter()
 
-// 프로필: 저장하면 응답의 새 토큰으로 바꿔야 AI 서비스에 반영된다(DEV_02 4.5).
-// PATCH /api/me/profile에는 view만 보낸다(v0.2에서 사용자 수준(level)은 서버에도 없다). 표시 이름은 가입할 때 정한 값을 보여 주기만 한다.
-const form = reactive({ view: profile.view })
-const saving = ref(false)
-const profileError = ref('')
-watch(
-  () => profile.view,
-  (view) => (form.view = view),
-)
-
-async function saveProfile() {
-  saving.value = true
-  profileError.value = ''
-  try {
-    await profile.updateProfile({ view: form.view })
-    toast('프로필을 저장했어요. 다음 질문부터 반영돼요.')
-  } catch (e) {
-    profileError.value = errorText(e)
-  } finally {
-    saving.value = false
-  }
-}
+// 프로필: 바꿀 항목이 없다(수준·관점은 없어졌다). 표시 이름과 아이디는 가입할 때 정한 값을 보여 주기만 한다.
 
 // 팀 정보: GET /api/team(백엔드 P1). 아직 없으면 로그인 응답의 team을 보여 준다.
 const team = ref(null)
@@ -86,22 +62,16 @@ onMounted(() => {
 
     <section class="block" aria-labelledby="s-profile">
       <h2 id="s-profile">내 프로필</h2>
-      <form class="form" @submit.prevent="saveProfile">
-        <dl class="facts">
-          <div><dt>표시 이름</dt><dd>{{ profile.displayName }}</dd></div>
-          <div><dt>아이디</dt><dd>{{ auth.user?.username ?? auth.claims?.username }}</dd></div>
-        </dl>
-        <ViewSelector v-model:view="form.view" />
-        <p v-if="profileError" class="field-error" role="alert">{{ profileError }}</p>
-        <div><button class="btn btn-primary" type="submit" :disabled="saving">{{ saving ? '저장하는 중' : '프로필 저장' }}</button></div>
-      </form>
+      <dl class="facts">
+        <div><dt>표시 이름</dt><dd>{{ profile.displayName }}</dd></div>
+        <div><dt>아이디</dt><dd>{{ auth.user?.username ?? auth.claims?.username }}</dd></div>
+      </dl>
     </section>
 
     <section v-if="auth.hasTeam" class="block" aria-labelledby="s-team">
       <h2 id="s-team">팀</h2>
       <dl v-if="team" class="facts">
         <div><dt>팀 이름</dt><dd>{{ team.name }}</dd></div>
-        <div><dt>유형</dt><dd>{{ TEAM_TYPES[team.type]?.name ?? team.type }}</dd></div>
         <div v-if="team.memberCount != null"><dt>팀원</dt><dd class="tabular">{{ team.memberCount }}명</dd></div>
         <div><dt>내 역할</dt><dd>{{ auth.isAdmin ? '팀 관리자' : '팀원' }}</dd></div>
       </dl>

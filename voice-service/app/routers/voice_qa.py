@@ -33,7 +33,6 @@ class VoiceAnswer(BaseModel):
     needs_review: bool
     handoff: bool
     level: Literal["L1", "L2", "L3"]
-    view: Literal["dev", "rnd"]
     speech_text: str
     audio_id: str | None
     audio_url: str | None
@@ -51,8 +50,6 @@ def create_voice_qa_router(require_team, storage, rag_client: RagClient):
                  description="STT→튜터 RAG→선택 TTS. TTS 실패에도 답변·출처를 보존하고 audio 필드는 null입니다. 자동 재시도는 하지 않습니다.")
     async def voice_qa(
         request: Request, audio: UploadFile = File(...),
-        view: Literal["dev", "rnd"] | None = Form(None),
-        source: Literal["pdf", "web", "all"] = Form("all"),
         scope: str | None = Form(None), speak: Literal["true", "false"] = Form("true"),
         language: Literal["ko", "en", "auto"] = Form("ko"),
         level: Literal["L1", "L2", "L3"] | None = Form(None),
@@ -82,7 +79,7 @@ def create_voice_qa_router(require_team, storage, rag_client: RagClient):
             if not text:
                 raise ApiError(422, "STT_EMPTY", "음성을 인식하지 못했어요. 다시 말씀해 주세요.")
             try:
-                question = RagQuestion(question=text, source=source, scope=parsed_scope, view=view or user.view, level=level)
+                question = RagQuestion(question=text, scope=parsed_scope, level=level)
             except ValidationError:
                 raise ApiError(422, "VALIDATION_ERROR", "인식한 질문은 2~1000자여야 합니다.") from None
             tick = perf_counter()

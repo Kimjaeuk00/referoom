@@ -6,10 +6,11 @@ from app.rag import config_rag, llm, pipeline
 from app.rag.context import build_blocks, render_context
 from app.rag.deps import CurrentUser
 from app.rag.errors import ApiError
+from app.rag.prompts import ANSWER_STYLE
 from app.rag.schemas import AnswerDraft, RagRequest
 from app.rag.store_stub import Hit
 
-USER = CurrentUser(user_id=12, username="tester", role="member", team_id=3, team_type="dev", view="dev")
+USER = CurrentUser(user_id=12, username="tester", role="member", team_id=3)
 REQ = RagRequest(question="LoRA는 어떤 파라미터를 학습하나요?")
 TITLE = "LoRA: Low-Rank Adaptation of Large Language Models"
 REAL_GENERATE = llm.generate  # conftest의 autouse 가짜로 바뀌기 전의 원본 (수집 시점에 캡처)
@@ -94,6 +95,28 @@ def test_math_or_number_in_answer(fake_llm, set_hits, answer):
     assert run().needs_review is True
 
 
+@pytest.mark.parametrize("answer", [
+    "65B 모델의 메모리를 780GB 이상에서 48GB 미만으로 줄입니다 [S1]",  # 정수로만 된 수치 답(R08)
+    "학습 파라미터를 10,000배 줄입니다 [S1]",
+    "모델은 900,330,000개 파라미터를 가집니다 [S1]",
+])
+def test_integer_quantities_get_the_review_badge(fake_llm, set_hits, answer):
+    set_hits(hit())
+    fake_llm.state["draft"] = AnswerDraft(found=True, answer=answer, cited=["S1"])
+    assert run().needs_review is True
+
+
+@pytest.mark.parametrize("answer", [
+    "랭크 r은 보통 1에서 8 사이로 둡니다 [S1]",  # 단위 없는 작은 수
+    "한 번에 32 배치씩 학습합니다 [S1]",  # 배치는 배수가 아니다
+    "이 논문은 2021년에 발표되었습니다 [S1]",
+])
+def test_plain_small_numbers_do_not_get_the_badge(fake_llm, set_hits, answer):
+    set_hits(hit())
+    fake_llm.state["draft"] = AnswerDraft(found=True, answer=answer, cited=["S1"])
+    assert run().needs_review is False
+
+
 def test_has_math_chunk(set_hits):
     set_hits(hit(has_math=True))
     assert run().needs_review is True
@@ -116,15 +139,15 @@ def test_annotation_plus_body_is_ok(fake_llm, set_hits):
     assert run().needs_review is False
 
 
-# ---- 수준 × 관점 ----
-def test_level_view_change_prompt_not_sources(fake_llm, set_hits):
+# ---- 수준 ----
+def test_level_changes_prompt_not_sources(fake_llm, set_hits):
     set_hits(hit())
-    base = run(level="L1", view="dev")
-    other = run(level="L3", view="rnd")
+    base = run(level="L1")
+    other = run(level="L3")
     (sys_a, _, _), (sys_b, _, _) = fake_llm.calls
     assert sys_a != sys_b
-    assert "입문" in sys_a and "구현 관점" in sys_a
-    assert "심화" in sys_b and "연구 관점" in sys_b
+    assert "입문" in sys_a and "심화" in sys_b
+    assert ANSWER_STYLE in sys_a and ANSWER_STYLE in sys_b  # 답변 스타일은 깊이와 관계없이 하나
     assert base.sources == other.sources
 
 
@@ -307,3 +330,9 @@ def test_grouped_citations_are_split_so_the_chips_work(fake_llm, set_hits):
     r = run()
     assert r.answer == "두 근거가 같은 말을 한다 [S1] [S2]."
     assert {d.label for d in r.source_details} == {"S1", "S2"}  # 묶음 표기여도 인용 검증이 두 라벨을 모두 확인한다
+
+
+def test_system_prompt_forbids_answering_with_a_similarly_named_method():
+    # 프롬프트 문구 자체의 시험이다(실제 모델 동작은 eval과 로컬 반복 측정으로 본다). 규칙을 지우면 R09류 환각이 다시 난다.
+    from app.rag.prompts import SYSTEM_PROMPT
+    assert "이름이 [근거]에 나오지 않으면" in SYSTEM_PROMPT and "비슷한 다른 방법" in SYSTEM_PROMPT

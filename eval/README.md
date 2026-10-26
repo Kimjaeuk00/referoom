@@ -7,7 +7,7 @@ RAG 서비스를 같은 질문으로 반복 측정한다. 질문은 모드(`tuto
 
 | 파일 | 내용 |
 |---|---|
-| `questions/rag.jsonl`, `rag_extra.jsonl`, `rag_visual.jsonl` | tutor 질문 69개(기존). 모두 `"mode": "tutor"` |
+| `questions/rag.jsonl`, `rag_extra.jsonl`, `rag_visual.jsonl` | tutor 질문 49개(일반 29·math 3·거절 17). 모두 `"mode": "tutor"`. 근거 논문이 현재 라이브러리에 없는 질문 20개는 `questions_parked/`로 옮겼다 |
 | `questions/modes.jsonl` | prior·topic·verify 샘플 각 3개(`PR`·`TP`·`VF` 접두사). 2026-10-25에 실서버·실제 LLM으로 9개 모두 통과를 확인했다(표본이 작아 정확도 수치로 쓰지 않는다) |
 | `run_eval.py` | 질문 검증, 실서버 수집, 오프라인 재집계, 보고서 |
 | `mode_checks.py` | prior·topic·verify의 질문 검증·요청 생성·응답 검사(순수 함수) |
@@ -26,7 +26,7 @@ RAG 서비스를 같은 질문으로 반복 측정한다. 질문은 모드(`tuto
 
 ## 질문 형식
 
-공통 필드: `id`(전체에서 유일), `mode`, `type`, `question`, `view`(dev|rnd), `expected_answer`(사람이 읽는 기대 설명), `should_refuse`, `level`(위 설명).
+공통 필드: `id`(전체에서 유일), `mode`, `type`, `question`, `expected_answer`(사람이 읽는 기대 설명), `should_refuse`, `level`(위 설명).
 `mode`를 생략하면 tutor로 읽는다.
 
 | 모드 | `type` | 추가 필드 | 요청 |
@@ -62,7 +62,7 @@ RAG 서비스를 같은 질문으로 반복 측정한다. 질문은 모드(`tuto
 
 ## 최소 문항 규칙
 
-전체 20문항 이상, tutor `general` 12·`math` 3·`exception` 3 이상, prior·topic·verify는 각 3 이상. 현재는 tutor 69 + 새 모드 9 = 78문항이다.
+전체 20문항 이상, tutor `general` 12·`math` 3·`exception` 3 이상, prior·topic·verify는 각 3 이상. 현재는 tutor 49 + 새 모드 9 = 58문항이다. 호출 수를 줄여 측정할 때는 `subsets/half`(36문항)를 쓴다.
 새 모드 샘플 9개는 실서버에서 한 번 돌려 모두 통과했지만(2026-10-25, 시드 라이브러리 기준), 모드당 3개뿐이라 **구조 시험용**이다. 정확도를 말하려면 문항을 늘리고 기대값(논문 제목, 쪽, 판정)을 사람이 확인한다.
 
 ## 실행

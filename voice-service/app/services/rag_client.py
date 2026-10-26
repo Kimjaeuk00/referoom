@@ -16,9 +16,7 @@ class Scope(BaseModel):
 
 class RagQuestion(BaseModel):
     question: str = Field(min_length=2, max_length=1000)
-    source: Literal["pdf", "web", "all"] = "all"
     scope: Scope = Field(default_factory=Scope)
-    view: Literal["dev", "rnd"]
     level: Literal["L1", "L2", "L3"] | None = None
 
 
@@ -40,7 +38,6 @@ class RagAnswer(BaseModel):
     needs_review: bool
     handoff: bool
     level: Literal["L1", "L2", "L3"]
-    view: Literal["dev", "rnd"]
     latency_ms: int = Field(ge=0)
 
 

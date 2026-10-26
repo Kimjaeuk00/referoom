@@ -4,7 +4,6 @@ import { computed, reactive, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { errorText } from '@/api/errors'
-import { TEAM_TYPES } from '@/lib/levels'
 import { toast } from '@/composables/useToast'
 
 const auth = useAuthStore()
@@ -17,7 +16,6 @@ const form = reactive({
   displayName: '',
   teamMode: 'create', // create | join (DEV_01 4.1)
   teamName: '',
-  teamType: 'dev',
   teamCode: '',
 })
 const touched = ref(false)
@@ -46,7 +44,7 @@ function payload() {
     teamMode: form.teamMode,
   }
   return form.teamMode === 'create'
-    ? { ...base, teamName: form.teamName.trim(), teamType: form.teamType }
+    ? { ...base, teamName: form.teamName.trim() }
     : { ...base, teamCode: form.teamCode.trim().toUpperCase() }
 }
 
@@ -146,13 +144,6 @@ async function copyCode() {
                 <label class="label" for="su-team">팀 이름</label>
                 <input id="su-team" v-model="form.teamName" class="input" maxlength="100" :aria-invalid="Boolean(show('teamName'))" />
                 <p v-if="show('teamName')" class="field-error">{{ errors.teamName }}</p>
-              </div>
-              <div class="types">
-                <label v-for="(info, key) in TEAM_TYPES" :key="key" class="type" :class="{ on: form.teamType === key }">
-                  <input v-model="form.teamType" type="radio" name="teamType" :value="key" />
-                  <span class="type-name">{{ info.name }}</span>
-                  <span class="hint">{{ info.desc }}</span>
-                </label>
               </div>
               <p class="hint">팀을 만든 사람이 팀 관리자가 돼요. Zotero 연동과 초대 코드 관리는 관리자만 할 수 있어요.</p>
             </div>
@@ -254,43 +245,6 @@ h1 {
 .tab-panel {
   display: grid;
   gap: 12px;
-}
-
-.types {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.type {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  column-gap: 8px;
-  align-items: start;
-  padding: 10px 12px;
-  border: 1px solid var(--c-rule-strong);
-  border-radius: var(--radius-m);
-  background: var(--c-surface);
-  cursor: pointer;
-}
-
-.type.on {
-  border-color: var(--c-accent);
-  box-shadow: inset 0 0 0 1px var(--c-accent);
-}
-
-.type input {
-  margin-top: 5px;
-  accent-color: var(--c-accent);
-}
-
-.type-name {
-  font-size: var(--fs-sm);
-  font-weight: 600;
-}
-
-.type .hint {
-  grid-column: 2;
 }
 
 .code-input {

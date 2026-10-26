@@ -9,7 +9,6 @@ import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import workplace.enums.Role;
-import workplace.enums.ViewType;
 
 @Entity
 @Table(
@@ -64,13 +63,6 @@ public class User {
     )
     private Role role = Role.member;
 
-    @Enumerated(EnumType.STRING)
-    @Column(
-        name = "view_pref",
-        columnDefinition = "ENUM('dev','rnd')"
-    )
-    private ViewType viewPref;
-
     @Column(
         name = "created_at",
         nullable = false,
@@ -94,22 +86,4 @@ public class User {
         this.team = team;
         this.role = Role.member;
     }
-
-    public void updateProfile(ViewType viewPref) {
-        if (viewPref != null) {
-            this.viewPref = viewPref;
-        }
-    }
-
-    public ViewType getEffectiveView() {
-    if (viewPref != null) {
-        return viewPref;
-    }
-
-    if (team != null) {
-        return ViewType.valueOf(team.getTeamType().name());
-    }
-
-    return ViewType.dev;
-}
 }

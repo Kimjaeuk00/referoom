@@ -130,11 +130,9 @@ app.add_middleware(RequestLoggingMiddleware)
 - `username`: 사용자 이름.
 - `role`: `member` 또는 `team_admin`.
 - `team_id`: 양의 정수 또는 팀 미가입을 나타내는 `None`.
-- `team_type`: `dev`, `rnd` 또는 미가입 시 `None`.
-- `view`: `dev`, `rnd`.
 - `id`: `user_id`의 문자열 별칭. 기존 음성 저장소의 소유자 식별에 사용한다.
 
-JWT는 `iss/sub/username/role/team_id/team_type/view/iat/exp`를 포함해야 한다. v0.2부터 사용자 수준(`level`)은 발급하지도 요구하지도 않으며, 예전 토큰에 `level`이 들어 있어도 무시한다. 팀 미가입도 `team_id`와 `team_type`을 생략하지 않고 둘 다 `null`로 발급한다. 서명·허용 알고리즘·발급자·만료와 claim 형식이 검증되어야 사용자를 반환한다.
+JWT는 `iss/sub/username/role/team_id/iat/exp`를 포함해야 한다. 사용자 수준(`level`), 관점(`view`), 팀 유형(`team_type`)은 발급하지도 요구하지도 않으며, 예전 토큰에 들어 있어도 무시한다. 팀 미가입도 `team_id`를 생략하지 않고 `null`로 발급한다. 서명·허용 알고리즘·발급자·만료와 claim 형식이 검증되어야 사용자를 반환한다.
 
 Python은 회원 DB를 조회하지 않는다. 역할·팀은 토큰 발급 시점 정보이며, Java의 프로필 수정·팀 가입 응답에서 새 토큰을 받으면 클라이언트가 교체해야 한다. 이 패키지에는 토큰 블랙리스트나 즉시 로그아웃 무효화 기능이 없다.
 
@@ -174,7 +172,7 @@ def admin(user: CurrentUser = Depends(require_admin)):
 - `require_team`: 로그인 + 팀 가입 확인. 미가입은 `403 NO_TEAM`.
 - `require_admin`: 로그인 + 팀 가입 + `team_admin` 확인. 일반 팀원은 `403 FORBIDDEN`.
 
-`Depends(require_team)`처럼 함수 자체를 전달한다. `Depends(require_team())`처럼 직접 실행하지 않는다. 검색 범위는 검증된 `user.team_id`를 사용하고, 요청의 team ID나 `view`로 접근 권한을 정하지 않는다. 의존성만 붙였다고 저장소의 팀 필터링까지 자동 적용되는 것은 아니다.
+`Depends(require_team)`처럼 함수 자체를 전달한다. `Depends(require_team())`처럼 직접 실행하지 않는다. 검색 범위는 검증된 `user.team_id`를 사용하고, 요청의 team ID로 접근 권한을 정하지 않는다. 의존성만 붙였다고 저장소의 팀 필터링까지 자동 적용되는 것은 아니다.
 
 인증 순서는 다음과 같다.
 
@@ -321,7 +319,7 @@ python -m pytest -q tests
 
 1. 실제 Java 로그인 응답의 accessToken으로 보호 API가 통과한다. Swagger에는 Bearer 접두사 없이 토큰 문자열만 넣는다.
 2. 무토큰·잘못된 서명·만료 토큰은 401, 미가입 사용자는 `403 NO_TEAM`, 일반 팀원의 관리자 접근은 `403 FORBIDDEN`이다.
-3. RAG 검색은 검증된 팀 범위로 제한되고, 다른 팀 자료는 검색·원문 API 모두에서 차단된다. 설명 `view` 변경으로 권한이 바뀌지 않는다.
+3. RAG 검색은 검증된 팀 범위로 제한되고, 다른 팀 자료는 검색·원문 API 모두에서 차단된다.
 4. 정상 요청·입력 오류·서비스 오류가 기존 API 계약을 유지하고 요청 ID로 응답과 로그를 연결할 수 있다.
 5. 프론트 origin의 OPTIONS와 실제 Bearer 요청이 통과하고 브라우저가 `X-Request-Id`를 읽을 수 있다.
 6. RAG usage가 로그에 남으며 알 수 없는 사용량과 실제 0이 구분된다. 질문·토큰 원문은 로그에 남지 않는다.

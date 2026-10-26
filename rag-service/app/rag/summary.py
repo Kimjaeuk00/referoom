@@ -18,7 +18,7 @@ from app.rag.deps import CurrentUser, store
 from app.rag.errors import ApiError
 from app.rag.modes import gather_evidence
 from app.rag.pipeline import needs_review
-from app.rag.prompts import SUMMARY_CHECK, SUMMARY_EMPTY_TEXT, SUMMARY_PROMPT, SUMMARY_SECTIONS, SUMMARY_USER, VIEW_RULES
+from app.rag.prompts import SUMMARY_CHECK, SUMMARY_EMPTY_TEXT, SUMMARY_PROMPT, SUMMARY_SECTIONS, SUMMARY_USER, ANSWER_STYLE
 from app.rag.schemas import SummaryDraft, SummaryRequest, SummaryResponse, SummarySection
 
 logger = logging.getLogger("rag")
@@ -27,9 +27,9 @@ _INLINE_SPACE_RE = re.compile(r"[ \t]+")
 _BLANK_LINES_RE = re.compile(r"\n{3,}")
 
 
-def _sections(view: str) -> list[tuple[str, str, str, str]]:
-    """(key, 제목, 설명, 검색 질의) 6개. 마지막 check 섹션은 관점에 따라 다르다."""
-    return [*SUMMARY_SECTIONS, SUMMARY_CHECK[view]]
+def _sections() -> list[tuple[str, str, str, str]]:
+    """(key, 제목, 설명, 검색 질의) 6개."""
+    return [*SUMMARY_SECTIONS, SUMMARY_CHECK]
 
 
 def _evidence(team_id: int, paper_id: int, sections: list[tuple[str, str, str, str]]) -> list:
@@ -53,11 +53,10 @@ def _body(text: str | None) -> str | None:
 
 def run(req: SummaryRequest, user: CurrentUser, usage: dict | None = None) -> SummaryResponse:
     started = time.monotonic()
-    view = req.view or user.view or "dev"
     if req.paper_id not in store.paper_chunk_counts(user.team_id):
         raise ApiError(404, "NOT_FOUND", "논문을 찾을 수 없습니다.")
 
-    sections = _sections(view)
+    sections = _sections()
     hits = _evidence(user.team_id, req.paper_id, sections)
     if not hits:
         raise ApiError(404, "NOT_FOUND", "논문을 찾을 수 없습니다.")  # 색인에 있는데 청크를 못 읽는 경우도 '없음'으로 둔다
@@ -65,7 +64,7 @@ def run(req: SummaryRequest, user: CurrentUser, usage: dict | None = None) -> Su
     local = {b.label: b for b in blocks}
 
     guide = "\n".join(f"- {key} ({title}): {desc}" for key, title, desc, _ in sections)
-    system = SUMMARY_PROMPT.format(sections=guide, view_rules=VIEW_RULES[view])
+    system = SUMMARY_PROMPT.format(sections=guide, answer_style=ANSWER_STYLE)
     draft, in_tok, out_tok = llm.generate_structured(system, SUMMARY_USER.format(context=render_context(blocks), title=blocks[0].title), SummaryDraft)
     by_key = {s.key: s for s in draft.sections}  # 같은 key가 여러 번 오면 마지막 것
 
@@ -82,7 +81,7 @@ def run(req: SummaryRequest, user: CurrentUser, usage: dict | None = None) -> Su
             out.append(SummarySection(key=key, title=title, text=SUMMARY_EMPTY_TEXT, sources=[]))
 
     resp = SummaryResponse(
-        paper_id=req.paper_id, title=blocks[0].title, view=view, sections=out,
+        paper_id=req.paper_id, title=blocks[0].title, sections=out,
         needs_review=needs_review(" ".join(s.text for s in out if s.sources), used, False, 1.0), latency_ms=0,
     )
     if usage is not None:

@@ -22,6 +22,22 @@ def _optional_int(name: str) -> int | None:
 MIN_SCORE = float(os.getenv("MIN_SCORE", "0.55"))
 REVIEW_SCORE = float(os.getenv("REVIEW_SCORE", "0.60"))  # 정상 질문 중 하위 3/24가 검수 대상
 
+# ---- 질문이 이름을 든 논문 검색 (pipeline 튜터 경로, app/rag/paper_names.py) ----
+# 질문이 라이브러리 논문 2편 이상의 이름을 들면 논문별로 따로 검색해 합친다. 하나의 순위로 뽑으면 한 논문(주로 LoRA·QLoRA)에 쏠려
+# 다른 논문이 상위 5개에 못 들어왔다(비교 질문 16개 중 두 논문이 모두 검색된 것 1/16, eval/results/20261026_retrieval_compare_before.md).
+NAMED_PAPER_MIN_SCORE = float(os.getenv("NAMED_PAPER_MIN_SCORE", "0.50"))  # 이름이 든 논문의 문단은 MIN_SCORE보다 낮은 이 값부터 쓴다. 설계용 8문항에서 이름 든 논문의 최고 점수가 0.511·0.547·0.544라 0.55에서는 5/8, 0.50에서 8/8이었다. 이름이 든 논문은 이미 라이브러리에 있어 엉뚱한 논문이 섞이지 않고, 부족하면 모델이 found=false로 답한다
+NAMED_PAPER_PER_K = int(os.getenv("NAMED_PAPER_PER_K", "3"))  # 논문마다 따로 뽑는 후보 수
+# 이름 감지 별칭. 키는 논문 제목에 들어 있는 글자(대소문자 무시), 값은 질문에서 그 논문을 가리키는 표기다. 제목 콜론 앞 이름(QLoRA, Prefix-Tuning 등)은
+# 자동으로도 쓴다. 한국어 표기와 콜론 없는 제목(Prompt Tuning, Adapter)은 여기에 적어야 한다. 새 논문은 표에 없어도 제목 앞 이름으로는 감지된다.
+PAPER_ALIASES = {
+    "QLoRA": ["qlora", "q lora", "q-lora", "큐로라"],
+    "LoRA: Low-Rank": ["lora", "로라"],
+    "Prefix-Tuning": ["prefix-tuning", "prefix tuning", "프리픽스 튜닝", "프리픽스튜닝"],
+    "Prompt Tuning": ["prompt tuning", "prompt-tuning", "프롬프트 튜닝", "프롬프트튜닝"],
+    "Parameter-Efficient Transfer": ["adapter", "어댑터"],
+    "RETA-LLM": ["reta-llm", "reta llm"],
+}
+
 LLM_API_KEY = os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
 LLM_BASE_URL = os.getenv("LLM_BASE_URL")
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o")

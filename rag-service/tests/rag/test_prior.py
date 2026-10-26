@@ -10,7 +10,7 @@ from app.rag.errors import ApiError
 from app.rag.schemas import AnswerDraft, PriorCell, PriorRowDraft, RagRequest
 from app.rag.store_stub import Hit
 
-USER = CurrentUser(user_id=12, username="tester", role="member", team_id=3, team_type="dev", view="dev")
+USER = CurrentUser(user_id=12, username="tester", role="member", team_id=3)
 TITLES = {41: "LoRA: Low-Rank Adaptation", 42: "QLoRA: Efficient Finetuning", 43: "VeRA: Vector-based Adaptation"}
 
 
@@ -82,7 +82,7 @@ def test_comparison_answer_is_verified_and_counted(fake_llm, lib):
     prepare(fake_llm, {"LoRA": LORA, "QLoRA": QLORA})
     usage = {}
     r = pipeline.run(req(), USER, usage)
-    assert "[S1]" in r.answer and r.level == "L2" and r.view == "dev"
+    assert "[S1]" in r.answer and r.level == "L2"
     assert r.sources and all(" p." in s for s in r.sources)
     # 추출 2회 + 비교 1회, 토큰은 합계
     assert len(fake_llm.structured_calls) == 3
@@ -173,7 +173,7 @@ def test_only_the_users_team_index_is_asked(fake_llm, lib, monkeypatch):
     asked = []
     monkeypatch.setattr(prior.store, "paper_chunk_counts", lambda team_id: asked.append(team_id) or {41: 1})
     prepare(fake_llm, {"LoRA": LORA})
-    pipeline.run(req(scope={"type": "paper", "ids": [41]}), CurrentUser(user_id=1, username="u", role="member", team_id=4, team_type="dev", view="dev"))
+    pipeline.run(req(scope={"type": "paper", "ids": [41]}), CurrentUser(user_id=1, username="u", role="member", team_id=4))
     assert asked == [4]
 
 
@@ -196,16 +196,12 @@ def test_scope_all_without_hits_is_handoff(fake_llm, lib, monkeypatch):
     assert r.handoff is True and fake_llm.structured_calls == []
 
 
-def test_web_source_has_no_pdf_evidence(fake_llm, lib):
-    assert pipeline.run(req(source="web"), USER).handoff is True and fake_llm.structured_calls == []
-
-
-def test_level_and_view_reach_the_comparison_prompt(fake_llm, lib):
+def test_level_and_answer_style_reach_the_comparison_prompt(fake_llm, lib):
     prepare(fake_llm, {"LoRA": LORA, "QLoRA": QLORA})
-    pipeline.run(req(level="L1", view="rnd"), USER)
+    pipeline.run(req(level="L1"), USER)
     system = [s for s, _, schema in fake_llm.structured_calls if schema is AnswerDraft][0]
-    from app.rag.prompts import LEVEL_RULES, VIEW_RULES
-    assert LEVEL_RULES["L1"] in system and VIEW_RULES["rnd"] in system
+    from app.rag.prompts import ANSWER_STYLE, LEVEL_RULES
+    assert LEVEL_RULES["L1"] in system and ANSWER_STYLE in system
 
 
 def test_extraction_gets_each_papers_own_evidence_only(fake_llm, lib):
@@ -243,7 +239,7 @@ def test_api_returns_table_and_records_tokens(client, auth, fake_llm, lib):
     r = client.post("/rag-query", json=body, headers=auth)
     assert r.status_code == 200
     data = r.json()
-    assert {"answer", "sources", "source_details", "needs_review", "handoff", "level", "view", "latency_ms", "table"} == set(data)
+    assert {"answer", "sources", "source_details", "needs_review", "handoff", "level", "latency_ms", "table"} == set(data)
     assert data["table"][0]["labels"]["method"] == "S2"
     # 튜터 요청에는 table 키가 없다
     tutor = client.post("/rag-query", json={"question": "LoRA란?"}, headers=auth).json()

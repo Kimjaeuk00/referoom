@@ -48,16 +48,15 @@ const aiError = (status, code, detail, extra = {}) => [status, { detail, code, .
 
 // ---------- 인증 (DEV_01 4절) ----------
 const TEAMS = new Map([
-  [3, { id: 3, name: '플랫폼개발팀', type: 'dev', inviteCode: 'K3F9Q2XA' }],
-  [4, { id: 4, name: '선행연구팀', type: 'rnd', inviteCode: 'R7M2PQ4C' }],
+  [3, { id: 3, name: '플랫폼개발팀', inviteCode: 'K3F9Q2XA' }],
+  [4, { id: 4, name: '선행연구팀', inviteCode: 'R7M2PQ4C' }],
 ])
 
 const users = new Map()
 let userSeq = 20
 
-function addUser({ username, displayName, role = 'member', view = null, teamId = null }) {
-  const team = TEAMS.get(teamId)
-  const user = { id: ++userSeq, username, displayName: displayName || username, role, view: view ?? team?.type ?? 'dev', teamId }
+function addUser({ username, displayName, role = 'member', teamId = null }) {
+  const user = { id: ++userSeq, username, displayName: displayName || username, role, teamId }
   users.set(username, user)
   return user
 }
@@ -67,10 +66,10 @@ addUser({ username: 'admin', displayName: '지원', role: 'team_admin', teamId: 
 addUser({ username: 'rnd', displayName: '서준', role: 'team_admin', teamId: 4 })
 addUser({ username: 'noteam', displayName: '서연' })
 
-const teamView = (team) => (team ? { id: team.id, name: team.name, type: team.type } : null)
+const teamView = (team) => (team ? { id: team.id, name: team.name } : null)
 
 function publicUser(u) {
-  return { id: u.id, username: u.username, displayName: u.displayName, role: u.role, view: u.view, team: teamView(TEAMS.get(u.teamId)) }
+  return { id: u.id, username: u.username, displayName: u.displayName, role: u.role, team: teamView(TEAMS.get(u.teamId)) }
 }
 
 function issueToken(u) {
@@ -82,8 +81,6 @@ function issueToken(u) {
     username: u.username,
     role: u.role,
     team_id: team?.id ?? null,
-    team_type: team?.type ?? null,
-    view: u.view,
     iat: now,
     exp: now + 3600,
   }
@@ -102,7 +99,7 @@ function login({ body }) {
 }
 
 function signup({ body }) {
-  const { username, password, displayName, teamMode, teamName, teamType, teamCode } = body ?? {}
+  const { username, password, displayName, teamMode, teamName, teamCode } = body ?? {}
   if (!username || username.length < 4 || username.length > 50 || !password || password.length < 8)
     return javaError(422, 'VALIDATION_ERROR', 'invalid input')
   if (users.has(username)) return javaError(409, 'CONFLICT', 'username exists')
@@ -115,7 +112,7 @@ function signup({ body }) {
   if (teamMode === 'create') {
     const id = Math.max(...TEAMS.keys()) + 1
     const inviteCode = Math.random().toString(36).slice(2, 10).toUpperCase().padEnd(8, 'X')
-    TEAMS.set(id, { id, name: teamName, type: teamType, inviteCode })
+    TEAMS.set(id, { id, name: teamName, inviteCode })
     addUser({ username, displayName, role: 'team_admin', teamId: id })
     return [201, { ok: true, teamId: id, role: 'team_admin', inviteCode }]
   }
@@ -131,9 +128,7 @@ function me({ claims }) {
 function updateProfile({ body, claims }) {
   const user = userOf(claims)
   if (!user) return javaError(401, 'UNAUTHORIZED', 'unknown user')
-  if (!['dev', 'rnd'].includes(body?.view)) return javaError(422, 'VALIDATION_ERROR', 'view는 dev, rnd 중 하나여야 합니다') // 프로필은 view만 바꾼다(v0.2)
-  user.view = body.view
-  return [200, session(user)]
+  return [200, session(user)] // 바꿀 프로필 항목이 없다. 본문은 읽지 않고 토큰만 다시 발급한다(실서버와 같다)
 }
 
 function getTeam({ claims }) {
@@ -150,7 +145,7 @@ function joinTeam({ body, claims }) {
   if (user.teamId) return javaError(409, 'ALREADY_IN_TEAM', 'already in team')
   const team = teamByCode(body?.teamCode)
   if (!team) return javaError(404, 'TEAM_NOT_FOUND', 'team not found')
-  Object.assign(user, { teamId: team.id, view: team.type })
+  user.teamId = team.id
   return [200, session(user)]
 }
 
@@ -390,10 +385,7 @@ const LORA_BY_LEVEL = {
   L2: 'LoRA는 사전학습 가중치 $W_0$를 고정하고, 업데이트 $\\Delta W$를 랭크 $r$인 두 행렬의 곱 $BA$로 제한해 그 부분만 학습합니다 [S1].\n\n- 학습 대상: 주로 어텐션의 $W_q$, $W_v$에 붙인 $A \\in \\mathbb{R}^{r \\times k}$, $B \\in \\mathbb{R}^{d \\times r}$\n- 하이퍼파라미터: 랭크 $r$(보통 1~8), 스케일 $\\alpha$\n- 초기화: $A$는 무작위, $B$는 0이라 학습 시작 시 $\\Delta W = 0$ [S1]',
   L3: 'LoRA는 적응에 필요한 가중치 변화가 낮은 내재 랭크(intrinsic rank)를 가진다는 가정에서 출발합니다 [S1]. 업데이트를 $\\Delta W = BA$ ($r \\ll \\min(d, k)$)로 제한하면 학습 파라미터는 $r(d + k)$개로 줄어듭니다.\n\n한계도 있습니다. 랭크가 너무 낮으면 표현력이 부족할 수 있고, 어느 층에 붙일지와 $r$은 실험으로 정해야 합니다 [S2].',
 }
-const LORA_BY_VIEW = {
-  dev: '구현할 때는 작업마다 B와 A만 어댑터 파일로 저장하면 되고, 배포 전에 W₀ + BA를 미리 합쳐 두면 추론 지연이 늘지 않아요 [S2].',
-  rnd: '연구 관점에서 핵심 주장은 전체 미세조정과 비슷한 성능을 훨씬 적은 학습 파라미터로 낸다는 점이고, 배포 시 지연이 없다는 점이 기존 어댑터 방식과의 차이입니다 [S2].',
-}
+const LORA_TAIL = '구현할 때는 작업마다 B와 A만 어댑터 파일로 저장하면 되고, 배포 전에 W₀ + BA를 미리 합쳐 두면 추론 지연이 늘지 않아요. 핵심 주장은 전체 미세조정과 비슷한 성능을 훨씬 적은 학습 파라미터로 낸다는 점이고, 배포 시 지연이 없다는 점이 기존 어댑터 방식과의 차이입니다 [S2].'
 
 function ragQuery({ body, claims }) {
   const question = String(body?.question ?? '').trim()
@@ -403,9 +395,8 @@ function ragQuery({ body, claims }) {
   if (question.includes('401')) return aiError(401, 'TOKEN_EXPIRED', '토큰 만료')
 
   const level = body.level ?? 'L2' // 요청의 level(더 쉽게/더 깊게)만 쓰고 JWT claim은 무시한다(v0.2)
-  const view = body.view ?? claims.view ?? 'dev'
   const delay = question.includes('느린') ? 12_000 : between(1500, 3000)
-  const meta = { view, latency_ms: delay }
+  const meta = { latency_ms: delay }
   const handoff = [200, { ...meta, answer: '팀 라이브러리에서 관련 내용을 찾을 수 없습니다.', sources: [], source_details: [], needs_review: false, handoff: true }, delay]
 
   if (teamPapers(claims).every((p) => p.status !== 'indexed') || /없는/.test(question)) return handoff
@@ -438,7 +429,7 @@ function ragQuery({ body, claims }) {
     detail(41, 'S1', 4, '사전학습 가중치 W₀는 고정하고, 업데이트를 랭크 r인 두 행렬 B, A의 곱으로 제한해 그 부분만 학습한다.'),
     detail(41, 'S2', 5, '배포할 때 W = W₀ + BA를 미리 계산해 두면 추론 지연이 추가로 생기지 않는다.'),
   ]
-  const answer = `${LORA_BY_LEVEL[level] ?? LORA_BY_LEVEL.L2}\n\n${LORA_BY_VIEW[view] ?? LORA_BY_VIEW.dev}`
+  const answer = `${LORA_BY_LEVEL[level] ?? LORA_BY_LEVEL.L2}\n\n${LORA_TAIL}`
   return [200, { ...meta, answer, sources: sourcesOf(details), source_details: details, needs_review: false, handoff: false }, delay]
 }
 
@@ -494,9 +485,8 @@ function topicSuggest({ body, claims }) {
   const hint = String(body.hint ?? '')
   const failed = scenarioError(hint)
   if (failed) return failed
-  const view = body.view ?? claims.view ?? 'dev'
   const delay = modeDelay(hint, 3000, 4500)
-  const handoff = [200, { limitations: [], topics: [], sources: [], source_details: [], needs_review: false, handoff: true, view, latency_ms: delay }, delay]
+  const handoff = [200, { limitations: [], topics: [], sources: [], source_details: [], needs_review: false, handoff: true, latency_ms: delay }, delay]
   const targets = indexedPapers(claims, ids).filter((p) => factsOf(p).limitation) // 한계 서술이 있는 논문만 근거가 된다
   if (!targets.length || /없는/.test(hint)) return handoff
 
@@ -521,7 +511,7 @@ function topicSuggest({ body, claims }) {
     similar_papers: similar && t.perspective === 'limitation_fix' ? [{ paper_id: similar.id, title: similar.title, score: 0.71 }] : [],
     ai_generated: true,
   }))
-  return [200, { limitations, topics, sources: sourcesOf(details), source_details: details, needs_review: true, handoff: false, view, latency_ms: delay }, delay]
+  return [200, { limitations, topics, sources: sourcesOf(details), source_details: details, needs_review: true, handoff: false, latency_ms: delay }, delay]
 }
 
 const claim = (fields) => ({ sentence: '', subject: null, metric: null, claimed_value: null, dataset: null, found_value: null, condition: null, verdict: 'not_found', labels: [], delta: null, ...fields })
@@ -532,9 +522,8 @@ function verifyManuscript({ body, claims }) {
   if (body.paper_ids != null && !(Array.isArray(body.paper_ids) && body.paper_ids.every(Number.isInteger))) return aiError(422, 'VALIDATION_ERROR', '대상 논문 형식이 올바르지 않습니다.')
   const failed = scenarioError(text)
   if (failed) return failed
-  const view = body.view ?? claims.view ?? 'dev'
   const delay = modeDelay(text, 3500, 5000)
-  const base = { sources: [], source_details: [], needs_review: true, view, latency_ms: delay } // 수치를 다루므로 항상 검토 필요(PRD 5.4)
+  const base = { sources: [], source_details: [], needs_review: true, latency_ms: delay } // 수치를 다루므로 항상 검토 필요(PRD 5.4)
   const scoped = indexedPapers(claims, body.paper_ids ?? undefined)
 
   if (/dora|없는/i.test(text) || !scoped.length) {
@@ -569,7 +558,6 @@ function verifyManuscript({ body, claims }) {
 function summary({ body, claims }) {
   const paper = findPaper(claims, body?.paper_id)
   if (!paper) return aiError(404, 'NOT_FOUND', '논문을 찾을 수 없습니다.')
-  const view = body.view ?? 'dev'
   const src = (page) => [`${paper.title} p.${page}`]
   const sections = [
     { key: 'problem', title: '문제', text: '이 논문이 풀려는 문제를 정리한 목업 문단입니다. 기존 방법의 비용과 한계를 짚습니다.', sources: src(1) },
@@ -577,11 +565,9 @@ function summary({ body, claims }) {
     { key: 'method', title: '방법', text: '- 입력과 출력\n- 학습 대상\n- 주요 하이퍼파라미터', sources: src(3) },
     { key: 'result', title: '결과', text: '주요 실험 결과를 비교한 목업 문단입니다. 수치는 원문에서 확인하세요.', sources: src(8) },
     { key: 'limit', title: '한계', text: '논문에서 찾을 수 없음', sources: [] },
-    view === 'rnd'
-      ? { key: 'check', title: '선행연구 비교·재현성', text: '기존 방법과의 차이, 재현에 필요한 설정을 정리한 목업 문단입니다.', sources: src(6) }
-      : { key: 'check', title: '구현 시 체크포인트', text: '1. 어디에 붙일지 정한다\n2. 하이퍼파라미터 기본값으로 시작한다\n3. 평가셋으로 비교한다', sources: src(6) },
+    { key: 'check', title: '구현·재현 체크포인트', text: '1. 어디에 붙일지 정한다\n2. 하이퍼파라미터 기본값으로 시작한다\n3. 기존 방법과의 차이와 재현에 필요한 설정을 확인한다', sources: src(6) },
   ]
-  return [200, { paper_id: paper.id, title: paper.title, view, sections, needs_review: true, latency_ms: 9100 }, between(2000, 3000)]
+  return [200, { paper_id: paper.id, title: paper.title, sections, needs_review: true, latency_ms: 9100 }, between(2000, 3000)]
 }
 
 // ---------- 음성 (DEV_04 6.2) ----------
@@ -619,7 +605,7 @@ function tts({ body, claims }) {
 function voiceQa({ formData, claims }) {
   const audio = formData?.get('audio')
   if (!audio || audio.size === 0) return aiError(422, 'STT_EMPTY', '음성을 인식하지 못했어요. 다시 말씀해 주세요.')
-  const [status, rag] = ragQuery({ body: { question: 'LoRA는 어떤 파라미터를 학습해?', view: formData.get('view') }, claims })
+  const [status, rag] = ragQuery({ body: { question: 'LoRA는 어떤 파라미터를 학습해?' }, claims })
   if (status !== 200) return [status, rag]
   const speech = rag.handoff ? '논문 라이브러리에서 관련 내용을 찾지 못했어요. 논문 추가를 요청해 보세요.' : '사전학습 가중치는 고정하고 저랭크 행렬만 학습합니다. 자세한 내용은 화면을 확인하세요.'
   return [200, { stt_text: 'LoRA는 어떤 파라미터를 학습해?', ...rag, speech_text: speech, ...newAudio(claims), latency_ms: { stt: 1200, rag: rag.latency_ms, tts: 900, total: 2100 + rag.latency_ms } }, 3000]

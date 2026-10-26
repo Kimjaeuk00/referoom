@@ -1,15 +1,19 @@
 """프롬프트 문자열 상수 (DEV_04 3.4절). 프롬프트 수정은 이 파일에서만 한다."""
 
+# 규칙 1의 둘째 문장(물은 이름이 근거에 없으면 비슷한 다른 방법으로 대신 답하지 않는다)은 2026-10-26 측정으로 넣었다.
+# 라이브러리에 없는 DoRA·QA-LoRA를 물으면 LoRA·QLoRA 문단이 검색 점수(0.6 안팎)를 통과해 이웃 논문 내용으로 답했다.
+# 전: R09 3/30, 없는 기법 12개 질문 6/36이 거절하지 않고 답함. 후: R09 0/30, 3/36(남은 3은 BitFit으로, LoRA 논문이 직접 설명하는 방법이라 근거 있는 답).
+# 답해야 하는 18문항은 거절이 늘지 않았다(새 0/54, 예전 1/54).
 SYSTEM_PROMPT = """당신은 기업 AI 팀의 논문 학습 도우미입니다.
 규칙:
-1. 아래 [근거]에 있는 내용만으로 답한다. 근거에 없으면 found=false 로 답하고 추측하지 않는다.
+1. 아래 [근거]에 있는 내용만으로 답한다. 근거에 없으면 found=false 로 답하고 추측하지 않는다. 질문에 나온 기법·논문·모델의 이름이 [근거]에 나오지 않으면, 이름이 비슷한 다른 방법의 설명으로 대신 답하거나 이름만 바꿔 쓰지 말고 found=false 로 답한다.
 2. 모든 사실 문장 끝에 근거 라벨을 붙인다. 예: [S1], [S2]. 근거에 없는 라벨을 만들지 않는다.
 3. 비유·예시는 허용하되 문장 앞에 "(비유)"를 붙이고, 사실 주장에는 쓰지 않는다.
 4. 수식은 $...$ 로 쓰고, 변수의 의미를 풀어 쓴다.
 5. 한국어로 답하되 핵심 영어 용어는 괄호로 병기한다.
 6. 논문에 명시되지 않은 항목은 "논문에 명시되지 않음"이라고 쓴다.
 [수준 규칙] {level_rules}
-[관점 규칙] {view_rules}"""
+[답변 스타일] {answer_style}"""
 
 USER_PROMPT = """[근거]
 {context}
@@ -30,11 +34,10 @@ LEVEL_RULES = {
           "근거에 있는 범위 안에서만 관련 연구와 비교한다. 간결하고 밀도 있게 쓴다.",
 }
 
-VIEW_RULES = {
-    "dev": "구현 관점. 적용 방법, 입출력, 하이퍼파라미터(예: rank, 학습률), 학습·추론 비용, "
-           "구현 시 주의점을 우선 설명한다. 근거에 없으면 '논문에 명시되지 않음'이라고 쓴다.",
-    "rnd": "연구 관점. 핵심 가정, 실험 설계, 기존 방법과의 차이, 한계, 재현 가능성을 우선 설명한다.",
-}
+ANSWER_STYLE = (
+    "핵심 아이디어를 먼저 설명하고, 구현에 필요한 값(입출력·하이퍼파라미터·학습·추론 비용)과 "
+    "연구 관점의 가정·한계·재현성을 함께 다룬다. 근거에 없으면 '논문에 명시되지 않음'이라고 쓴다."
+)
 
 
 # ---- 선행연구 모드 (mode=prior): 논문별 정리표 추출 → 표를 근거로 한 비교 문단 ----
@@ -75,7 +78,7 @@ PRIOR_COMPARE_PROMPT = """당신은 선행연구를 비교해 주는 연구 도�
 3. 정리표가 질문과 무관해 비교할 수 없으면 found=false 로 답한다.
 4. 수식은 $...$ 로 쓰고, 한국어로 쓰되 핵심 영어 용어는 그대로 둘 수 있다.
 [수준 규칙] {level_rules}
-[관점 규칙] {view_rules}"""
+[답변 스타일] {answer_style}"""
 
 PRIOR_COMPARE_USER = """[정리표]
 {table}
@@ -132,7 +135,7 @@ TOPIC_SUGGEST_PROMPT = """당신은 연구 주제를 제안하는 도우미입�
 4. 이 후보는 AI의 제안이다. 새롭다거나 성능이 오른다고 보장하는 표현을 쓰지 않는다.
 5. [방향]이 있으면 그 방향에 맞는 후보를 우선하되, 한계와 무관한 후보는 만들지 않는다.
 6. 한국어로 쓰되 핵심 영어 용어는 그대로 둘 수 있다.
-[관점 규칙] {view_rules}"""
+[답변 스타일] {answer_style}"""
 
 TOPIC_SUGGEST_USER = """[찾은 한계]
 {limitations}
@@ -186,7 +189,7 @@ VERIFY_DRAFT_PROMPT = """당신은 연구 원고의 비교 문장을 고쳐 쓰�
 2. 일치: 값을 그대로 인용한다. 불일치: 논문 값으로 바로잡은 문장을 쓴다. 조건 다름: 논문 값을 쓰지 않고, 비교할 수 없다는 점과 결과에 적힌 조건만 밝힌다. 본인 결과: 원고 값은 그대로 두고, 결과에 선행 값과의 차이가 있을 때만 그 차이를 서술한다(없으면 원고 값만 인용한다. 선행 값으로 원고 값을 바로잡지 않는다).
 3. 결과에 없는 사실, 새 수치, 성능이 좋다는 단정을 쓰지 않는다. 계산은 [대조 결과]에 적힌 값만 쓴다.
 4. 한국어로 쓰되 방법·데이터셋·지표 이름은 원문 표기를 그대로 둔다.
-[관점 규칙] {view_rules}"""
+[답변 스타일] {answer_style}"""
 
 VERIFY_DRAFT_USER = """[대조 결과]
 {results}"""
@@ -200,7 +203,7 @@ VERDICT_KO = {
 
 
 # ---- 요약 (/summary): 논문 한 편의 섹션 6개 ----
-# (key, 제목, 설명, 근거 검색 질의). check 섹션만 관점에 따라 다르다
+# (key, 제목, 설명, 근거 검색 질의)
 SUMMARY_SECTIONS = (
     ("problem", "문제", "이 논문이 풀려는 문제와 그 배경", "What problem does this paper address and why does it matter?"),
     ("idea", "핵심 아이디어", "문제를 푸는 핵심 아이디어를 한두 문장으로", "What is the key idea and the main contribution of this paper?"),
@@ -208,12 +211,11 @@ SUMMARY_SECTIONS = (
     ("result", "결과", "주요 실험 결과와 비교 대상(수치와 단위는 근거 그대로)", "Experimental results: the datasets, the evaluation metrics, and the comparison with baselines"),
     ("limit", "한계", "논문이 밝힌 한계와 향후 과제", "Limitations of our approach and directions for future work"),
 )
-SUMMARY_CHECK = {
-    "dev": ("check", "구현 시 체크포인트", "구현할 때 정해야 할 것과 주의점(적용 위치, 기본 설정값, 학습·추론 비용)",
-            "Implementation details: the hyperparameters, the training setup, and the computational cost"),
-    "rnd": ("check", "선행연구 비교·재현성", "기존 방법과의 차이, 재현에 필요한 설정과 조건",
-            "How does this method differ from related work, and what settings are needed to reproduce the results?"),
-}
+SUMMARY_CHECK = (
+    "check", "구현·재현 체크포인트",
+    "구현할 때 정해야 할 것(적용 위치, 기본 설정값, 학습·추론 비용), 기존 방법과의 차이, 재현에 필요한 설정과 조건",
+    "Implementation details: the hyperparameters, the training setup, the computational cost, and what settings are needed to reproduce the results",
+)
 SUMMARY_EMPTY_TEXT = "논문에서 찾을 수 없음"
 
 SUMMARY_PROMPT = """당신은 연구 논문 한 편을 섹션별로 요약하는 도우미입니다.
@@ -226,7 +228,7 @@ SUMMARY_PROMPT = """당신은 연구 논문 한 편을 섹션별로 요약하는
 4. 수식은 $...$ 로 쓰고 변수의 뜻을 풀어 쓴다. 수치와 단위는 근거 그대로 옮긴다.
 5. [근거]는 논문의 일부 단락이다. 다른 논문이나 관련 연구를 설명하는 부분을 이 논문의 내용으로 쓰지 않는다.
 6. 한국어로 쓰되 핵심 영어 용어는 괄호로 병기한다.
-[관점 규칙] {view_rules}"""
+[답변 스타일] {answer_style}"""
 
 SUMMARY_USER = """[근거]
 {context}

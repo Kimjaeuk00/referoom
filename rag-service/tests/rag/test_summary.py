@@ -6,11 +6,11 @@ import pytest
 from app.rag import config_rag, summary
 from app.rag.deps import CurrentUser
 from app.rag.errors import ApiError
-from app.rag.prompts import SUMMARY_EMPTY_TEXT, VIEW_RULES
+from app.rag.prompts import ANSWER_STYLE, SUMMARY_EMPTY_TEXT
 from app.rag.schemas import SummaryDraft, SummaryRequest, SummarySectionDraft
 from app.rag.store_stub import Hit
 
-USER = CurrentUser(user_id=12, username="tester", role="member", team_id=3, team_type="dev", view="dev")
+USER = CurrentUser(user_id=12, username="tester", role="member", team_id=3)
 TITLE = "LoRA: Low-Rank Adaptation of Large Language Models"
 KEYS = ["problem", "idea", "method", "result", "limit", "check"]
 # 질의 종류별로 다른 쪽을 돌려준다. 'What' 질의 둘(문제·핵심 아이디어)은 같은 쪽이라 중복이 제거된다
@@ -62,9 +62,9 @@ def call(**kw):
 def test_six_sections_in_order_with_sources(fake_llm, lib):
     prepare(fake_llm)
     r = call()
-    assert (r.paper_id, r.title, r.view) == (41, TITLE, "dev")
+    assert (r.paper_id, r.title) == (41, TITLE)
     assert [s.key for s in r.sections] == KEYS
-    assert [s.title for s in r.sections] == ["문제", "핵심 아이디어", "방법", "결과", "한계", "구현 시 체크포인트"]
+    assert [s.title for s in r.sections] == ["문제", "핵심 아이디어", "방법", "결과", "한계", "구현·재현 체크포인트"]
     # sources는 프론트가 읽는 '제목 p.N' 문자열이고, 논문 쪽 순서를 따른다
     assert r.sections[2].sources == [f"{TITLE} p.4", f"{TITLE} p.5"]
     assert all(re.fullmatch(r"(.*)\s+p\.(\d+)", src) for s in r.sections for src in s.sources)
@@ -73,19 +73,13 @@ def test_six_sections_in_order_with_sources(fake_llm, lib):
     assert r.sections[2].text == "- 가중치 고정\n- 행렬 B, A만 학습"
 
 
-def test_view_changes_only_the_check_section(fake_llm, lib):
+def test_check_section_and_answer_style_are_single(fake_llm, lib):
+    # 관점(dev/rnd)이 없어졌으므로 check 섹션과 답변 스타일은 하나다. 요청에 view가 있어도 무시한다.
     prepare(fake_llm)
-    dev, rnd = call(view="dev"), call(view="rnd")
-    assert dev.sections[-1].title == "구현 시 체크포인트" and rnd.sections[-1].title == "선행연구 비교·재현성"
-    assert [s.title for s in dev.sections[:-1]] == [s.title for s in rnd.sections[:-1]]
-    queries = [c for c in fake_llm.structured_calls]
-    assert VIEW_RULES["rnd"] in queries[-1][0] and "선행연구 비교·재현성" in queries[-1][0]
-
-
-def test_default_view_comes_from_the_user(fake_llm, lib):
-    prepare(fake_llm)
-    rnd_user = CurrentUser(user_id=1, username="u", role="member", team_id=3, team_type="rnd", view="rnd")
-    assert summary.run(SummaryRequest(paper_id=41), rnd_user).view == "rnd"
+    r = call(view="rnd")
+    assert r.sections[-1].key == "check" and r.sections[-1].title == "구현·재현 체크포인트"
+    system = fake_llm.structured_calls[-1][0]
+    assert ANSWER_STYLE in system and "구현·재현 체크포인트" in system
 
 
 def test_unsupported_sections_say_so(fake_llm, lib):
@@ -160,7 +154,7 @@ def test_missing_paper_is_404_without_llm(fake_llm, lib):
 
 
 def test_other_teams_paper_looks_the_same_as_missing(fake_llm, lib):
-    other = CurrentUser(user_id=1, username="u", role="member", team_id=4, team_type="dev", view="dev")
+    other = CurrentUser(user_id=1, username="u", role="member", team_id=4)
     with pytest.raises(ApiError) as e:
         summary.run(SummaryRequest(paper_id=41), other)  # 41은 팀 3의 논문
     assert (e.value.status, e.value.code, e.value.detail) == (404, "NOT_FOUND", "논문을 찾을 수 없습니다.")
@@ -188,11 +182,11 @@ def test_llm_failure_is_an_error(fake_llm, lib):
 
 def test_api_response_shape_and_token_log(client, auth, fake_llm, lib, access_log):
     prepare(fake_llm)
-    r = client.post("/summary", json={"paper_id": 41, "view": "rnd"}, headers={**auth, "X-Request-Id": "req-sum-1"})
+    r = client.post("/summary", json={"paper_id": 41}, headers={**auth, "X-Request-Id": "req-sum-1"})
     assert r.status_code == 200
     data = r.json()
-    assert set(data) == {"paper_id", "title", "view", "sections", "needs_review", "latency_ms"}
-    assert all(set(s) == {"key", "title", "text", "sources"} for s in data["sections"]) and data["view"] == "rnd"
+    assert set(data) == {"paper_id", "title", "sections", "needs_review", "latency_ms"}
+    assert all(set(s) == {"key", "title", "text", "sources"} for s in data["sections"])
     (rec,) = [x for x in access_log if x["request_id"] == "req-sum-1"]
     assert (rec["path"], rec["status"], rec["team_id"], rec["in_tok"], rec["out_tok"]) == ("/summary", 200, 3, 100, 20)
 
@@ -205,7 +199,7 @@ def test_api_not_found_requires_login_and_validation(client, auth, fake_llm, lib
     assert (r.status_code, r.json()["code"]) == (401, "UNAUTHORIZED")
     r = client.post("/summary", json={"paper_id": 41}, headers={"Authorization": f"Bearer {make_token(team_id=None)}"})
     assert (r.status_code, r.json()["code"]) == (403, "NO_TEAM")
-    for body in ({"paper_id": "41"}, {"paper_id": True}, {}, {"paper_id": 41, "view": "all"}):
+    for body in ({"paper_id": "41"}, {"paper_id": True}, {}):
         r = client.post("/summary", json=body, headers=auth)
         assert (r.status_code, r.json()["code"]) == (422, "VALIDATION_ERROR")
     assert fake_llm.structured_calls == []
@@ -236,5 +230,5 @@ def test_lead_chunks_are_included_and_deduplicated(fake_llm, lib, monkeypatch):
 
 def test_section_queries_are_sentences():
     from app.rag.prompts import SUMMARY_CHECK, SUMMARY_SECTIONS
-    queries = [q for *_, q in [*SUMMARY_SECTIONS, *SUMMARY_CHECK.values()]]
+    queries = [q for *_, q in [*SUMMARY_SECTIONS, SUMMARY_CHECK]]
     assert all(len(q.split()) >= 6 for q in queries)  # 키워드 나열이 아니라 문장형 질의

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { renderMarkdown } from '@/lib/markdown'
-import { canReask, reaskLevel, VIEWS } from '@/lib/levels'
+import { canReask, reaskLevel } from '@/lib/levels'
 import SourceList from './SourceList.vue'
 import ReviewBadge from './ReviewBadge.vue'
 import HandoffNotice from './HandoffNotice.vue'
@@ -9,8 +9,8 @@ import Icon from '@/components/common/Icon.vue'
 import { toast } from '@/composables/useToast'
 
 const props = defineProps({
-  result: { type: Object, required: true }, // { answer, sources, source_details, needs_review, handoff, view, latency_ms }
-  params: { type: Object, required: true }, // 이 답을 받을 때 보낸 view와, 더 쉽게/더 깊게일 때만 level
+  result: { type: Object, required: true }, // { answer, sources, source_details, needs_review, handoff, level, latency_ms }
+  params: { type: Object, required: true }, // 이 답을 받을 때 보낸 값. 더 쉽게/더 깊게일 때만 level이 있다
   busy: { type: Boolean, default: false },
   active: { type: Object, default: null }, // { label, n } 눌린 근거. TurnResult가 갖고 있다가 근거 목록에 넘긴다
   reaskable: { type: Boolean, default: true }, // 음성 튜터에서는 다시 묻기 대신 다시 말한다
@@ -42,7 +42,6 @@ function onBodyClick(event) {
 }
 
 const depth = computed(() => props.params.level ?? null) // 지금 답변의 깊이: L1(쉬움) | null(기본) | L3(깊음)
-const otherView = computed(() => (props.params.view === 'rnd' ? 'dev' : 'rnd'))
 </script>
 
 <template>
@@ -56,7 +55,6 @@ const otherView = computed(() => (props.params.view === 'rnd' ? 'dev' : 'rnd'))
       <template v-if="reaskable">
         <button type="button" class="btn" :disabled="busy || !canReask(depth, 'easier')" @click="emit('reask', { level: reaskLevel(depth, 'easier') })">더 쉽게</button>
         <button type="button" class="btn" :disabled="busy || !canReask(depth, 'deeper')" @click="emit('reask', { level: reaskLevel(depth, 'deeper') })">더 깊게</button>
-        <button type="button" class="btn" :disabled="busy" @click="emit('reask', { view: otherView })">{{ VIEWS[otherView].name }} 관점으로</button>
       </template>
       <slot />
       <button type="button" class="icon-btn copy" title="답변 복사" aria-label="답변 복사" @click="copyAnswer"><Icon name="copy" :size="18" /></button>

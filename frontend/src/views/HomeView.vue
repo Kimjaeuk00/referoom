@@ -5,14 +5,13 @@ import { useQaStore } from '@/stores/qa'
 import { useProfileStore } from '@/stores/profile'
 import { useLibraryStore } from '@/stores/library'
 import { sideOpen } from '@/composables/useSidePanel'
-import { VIEWS } from '@/lib/levels'
 import { useModeInput } from '@/composables/useModeInput'
 import { useVerifyConsent } from '@/composables/useVerifyConsent'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { voiceAvailable } from '@/lib/voice'
 import Icon from '@/components/common/Icon.vue'
 import ModeChips from '@/components/qa/ModeChips.vue'
-import ViewSelector from '@/components/common/ViewSelector.vue'
+import ResearchToggle from '@/components/qa/ResearchToggle.vue'
 import TopicSearchModal from '@/components/library/TopicSearchModal.vue'
 import MicButton from '@/components/voice/MicButton.vue'
 import { formatDate } from '@/lib/format'
@@ -28,10 +27,8 @@ const router = useRouter()
 const question = ref('')
 const input = ref(null)
 const plusMenu = ref(null)
-const condMenu = ref(null)
 const topicOpen = ref(false)
 
-const view = computed({ get: () => qa.view ?? profile.view, set: (v) => (qa.view = v) })
 const { spec, trimmed, reasonText, canSend, max } = useModeInput(question)
 const name = computed(() => profile.displayName)
 
@@ -55,9 +52,9 @@ onMounted(() => {
 })
 onBeforeUnmount(() => document.removeEventListener('pointerdown', closeMenus))
 
-// 바깥을 누르면 열린 작은 메뉴(+, 조건)를 닫는다
+// 바깥을 누르면 열린 작은 메뉴(+)를 닫는다
 function closeMenus(event) {
-  for (const d of [plusMenu.value, condMenu.value]) if (d?.open && !d.contains(event.target)) d.open = false
+  for (const d of [plusMenu.value]) if (d?.open && !d.contains(event.target)) d.open = false
 }
 
 const consent = useVerifyConsent()
@@ -75,7 +72,7 @@ function submit() {
     router.push({ name: 'ask' })
     return
   }
-  const turn = qa.ask(trimmed.value, { source: qa.source, scope: qa.scope, view: view.value })
+  const turn = qa.ask(trimmed.value, { scope: qa.scope })
   if (turn) router.push({ name: 'ask' })
 }
 
@@ -121,24 +118,19 @@ function openPapers() {
           @keydown="onKeydown"
         ></textarea>
 
-        <!-- 시안의 "Pro 높음" 자리: 답변 관점 (모드 칩은 입력창 아래) -->
-        <details ref="condMenu" class="menu-wrap">
-          <summary class="cond">
-            <span class="cond-view">{{ VIEWS[view]?.name }} 관점</span>
-            <Icon name="chevron" :size="18" />
-          </summary>
-          <div class="pop cond-pop">
-            <ViewSelector v-model:view="view" />
-          </div>
-        </details>
+        <!-- 연구 모드 스위치: 꺼져 있으면 튜터. 켜면 입력창 아래에 선행연구·주제·검증이 나온다 -->
+        <ResearchToggle :model-value="qa.researchOn" :disabled="qa.busy" @update:model-value="qa.setResearch" />
 
         <MicButton v-if="voiceAvailable" compact :disabled="qa.busy" @transcript="question = $event" />
         <button class="send" type="submit" :disabled="!canSend" aria-label="질문 보내기"><Icon name="send" :size="18" /></button>
       </form>
 
-      <ModeChips :model-value="qa.mode" @update:model-value="qa.setMode" />
-      <p v-if="reasonText" id="home-reason" class="note" role="status">{{ reasonText }}</p>
-      <p v-else-if="spec.hint" class="note">{{ spec.hint }}</p>
+      <!-- 연구 모드를 켜고 끌 때 입력창이 움직이지 않도록 칩과 안내 문구의 자리를 항상 잡아 둔다 -->
+      <div class="mode-area">
+        <ModeChips v-if="qa.researchOn" :model-value="qa.mode" @update:model-value="qa.setMode" />
+        <p v-if="reasonText" id="home-reason" class="note" role="status">{{ reasonText }}</p>
+        <p v-else-if="spec.hint" class="note">{{ spec.hint }}</p>
+      </div>
 
       <p v-if="library.isEmpty" class="note">
         팀 라이브러리가 아직 비어 있어요. <button type="button" class="link" @click="topicOpen = true">주제로 논문 찾기</button>로 먼저 논문을 모아 주세요.
@@ -184,6 +176,15 @@ function openPapers() {
   justify-items: center;
   gap: 28px;
   text-align: center;
+}
+
+.mode-area {
+  width: 100%;
+  min-height: 72px;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 12px;
 }
 
 /* 가는 테두리 숫자 카드 */
@@ -242,8 +243,7 @@ function openPapers() {
   list-style: none;
 }
 
-.plus::-webkit-details-marker,
-.cond::-webkit-details-marker {
+.plus::-webkit-details-marker {
   display: none;
 }
 
@@ -270,27 +270,6 @@ function openPapers() {
 
 .menu-wrap {
   position: relative;
-}
-
-.cond {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 40px;
-  padding: 0 10px 0 12px;
-  border-radius: 999px;
-  font-size: var(--fs-md);
-  list-style: none;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.cond:hover {
-  background: var(--c-surface);
-}
-
-.cond-view {
-  font-weight: 500;
 }
 
 /* 작은 메뉴: 알약 아래로 펼친다 */
@@ -329,24 +308,7 @@ function openPapers() {
   background: var(--c-surface);
 }
 
-.cond-pop {
-  left: auto;
-  right: 0;
-  width: 300px;
-  padding: 16px;
-}
 
-/* 관점 고르기 안의 버튼은 메뉴 항목 모양을 따르지 않는다 */
-.cond-pop :deep(.segmented button) {
-  display: inline-flex;
-  padding: 0 12px;
-  border-radius: 999px;
-}
-
-.cond-pop :deep(.segmented button[aria-pressed="true"]) {
-  background: var(--c-black);
-  color: var(--c-on-black);
-}
 
 .send {
   flex: none;
@@ -432,13 +394,7 @@ function openPapers() {
     padding: 8px 6px 4px;
   }
 
-  .cond-pop {
-    right: auto;
-    left: 0;
-    width: min(300px, 80vw);
-  }
-
-  .menu-wrap:has(.cond) {
+  .research-toggle {
     margin-left: auto;
   }
 }

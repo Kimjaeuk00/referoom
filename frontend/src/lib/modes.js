@@ -42,18 +42,18 @@ const ids = (list) => (list ?? []).map(Number)
  * - scope는 튜터가 쓰는 범위(scopeBody 결과, 팀 전체면 undefined). 선행연구는 priorIds(수집·선택한 논문)가 있으면 그것으로 바꾼다.
  * - 주제·검증의 대상 논문은 paperIds. 검증은 비어 있으면 null(팀 전체)로 보낸다.
  */
-export function buildRequest(mode, { question = '', view, source = 'all', scope, paperIds = [], priorIds = [], level } = {}) {
+export function buildRequest(mode, { question = '', scope, paperIds = [], priorIds = [], level } = {}) {
   const spec = MODES[mode]
   if (!spec) throw new Error(`알 수 없는 모드: ${mode}`)
   const text = question.trim()
   const withLevel = level ? { level } : {}
-  if (mode === 'tutor') return { path: spec.path, timeoutKey: spec.timeoutKey, body: { question: text, mode, source, scope, view, top_k: 5, ...withLevel } }
+  if (mode === 'tutor') return { path: spec.path, timeoutKey: spec.timeoutKey, body: { question: text, mode, scope, top_k: 5, ...withLevel } }
   if (mode === 'prior') {
     const priorScope = priorIds.length ? { type: 'paper', ids: ids(priorIds) } : scope
-    return { path: spec.path, timeoutKey: spec.timeoutKey, body: { question: text, mode, source, scope: priorScope, view, top_k: 5, ...withLevel } }
+    return { path: spec.path, timeoutKey: spec.timeoutKey, body: { question: text, mode, scope: priorScope, top_k: 5, ...withLevel } }
   }
-  if (mode === 'topic') return { path: spec.path, timeoutKey: spec.timeoutKey, body: { paper_ids: ids(paperIds), hint: text, n: 4, view } }
-  return { path: spec.path, timeoutKey: spec.timeoutKey, body: { text, paper_ids: paperIds.length ? ids(paperIds) : null, view } }
+  if (mode === 'topic') return { path: spec.path, timeoutKey: spec.timeoutKey, body: { paper_ids: ids(paperIds), hint: text, n: 4 } }
+  return { path: spec.path, timeoutKey: spec.timeoutKey, body: { text, paper_ids: paperIds.length ? ids(paperIds) : null } }
 }
 
 /** 보내기 전에 입력을 확인한다. 반환: null(보내도 됨) 또는 사용자에게 보여 줄 이유. */

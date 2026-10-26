@@ -6,7 +6,7 @@ import { useProfileStore } from '@/stores/profile'
 import { useLibraryStore } from '@/stores/library'
 import { toast } from '@/composables/useToast'
 import { clampSide, isNarrow, SIDE_DEFAULT, SIDE_MAX, SIDE_MIN, sideOpen, sideWidth } from '@/composables/useSidePanel'
-import { depthNote, VIEWS } from '@/lib/levels'
+import { depthNote } from '@/lib/levels'
 import { MODES } from '@/lib/modes'
 import { useModeInput } from '@/composables/useModeInput'
 import { useVerifyConsent } from '@/composables/useVerifyConsent'
@@ -14,6 +14,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { toneOfLabel } from '@/lib/format'
 import PriorScopeBar from '@/components/qa/PriorScopeBar.vue'
 import ModeChips from '@/components/qa/ModeChips.vue'
+import ResearchToggle from '@/components/qa/ResearchToggle.vue'
 import PaperPicker from '@/components/qa/PaperPicker.vue'
 import TurnResult from '@/components/qa/TurnResult.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -30,11 +31,6 @@ const QUICK = [
   'RAG는 언제 쓰면 좋은가요?',
 ]
 const timeFmt = new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' })
-const SOURCES = [
-  ['all', '전체'],
-  ['pdf', 'PDF'],
-  ['web', '웹'],
-]
 
 const qa = useQaStore()
 const profile = useProfileStore()
@@ -45,9 +41,6 @@ const router = useRouter()
 const question = ref('')
 const topicOpen = ref(false)
 const thread = ref(null)
-
-// 관점의 처음 값은 내 프로필. 여기서 바꾼 값은 질문에만 쓰이고 프로필은 설정 화면에서 바꾼다.
-const view = computed({ get: () => qa.view ?? profile.view, set: (v) => (qa.view = v) })
 
 // 왼쪽 목록에서 고른 논문 = 질문 범위. 하나도 없으면 팀 전체.
 const pickedIds = computed({
@@ -71,25 +64,19 @@ onMounted(() => {
 })
 
 function scopeText(params) {
-  const { scope, source } = params
+  const { scope } = params
   let text = '팀 전체'
   if (scope?.type === 'tag' && scope.tags?.length) text = `태그 ${scope.tags.join(', ')}`
   if (scope?.type === 'paper' && scope.ids?.length)
     text = scope.ids.length > 1 ? `논문 ${scope.ids.length}편` : library.allPapers.find((p) => p.id === scope.ids[0])?.title ?? String(route.query.title ?? '고른 논문')
-  if (source === 'pdf') text += ', PDF만'
-  if (source === 'web') text += ', 웹 수집만'
   return text
 }
 
-// 관점과, 더 쉽게/더 깊게로 다시 물었으면 그 표시 (예: '구현 관점, 쉬운 설명')
-function viewNote(params) {
-  const depth = depthNote(params.level)
-  return `${VIEWS[params.view]?.name ?? ''} 관점${depth ? `, ${depth}` : ''}`
-}
-
+// 더 쉽게/더 깊게로 다시 물었으면 그 표시 (예: '쉬운 설명')
 function describe(params) {
   const mode = params.mode && params.mode !== 'tutor' ? `${MODES[params.mode].label}, ` : ''
-  return `${mode}${viewNote(params)}, ${scopeText(params)}`
+  const depth = depthNote(params.level)
+  return `${mode}${depth ? `${depth}, ` : ''}${scopeText(params)}`
 }
 
 function scrollToTurn(turn, block = 'start') {
@@ -108,7 +95,7 @@ async function submit() {
     question.value = ''
     return
   }
-  const turn = qa.ask(trimmed.value, { source: qa.source, scope: qa.scope, view: view.value })
+  const turn = qa.ask(trimmed.value, { scope: qa.scope })
   if (!turn) return
   question.value = ''
   if (isNarrow()) sideOpen.value = false // 좁은 화면에서는 서랍을 닫고 답을 보여 준다
@@ -155,7 +142,7 @@ async function onCollected(ids) {
     return
   }
   qa.priorScope = ids
-  const turn = qa.ask(pending, { source: qa.source, scope: qa.scope, view: view.value })
+  const turn = qa.ask(pending, { scope: qa.scope })
   if (!turn) return
   await nextTick()
   scrollToTurn(turn)
@@ -241,7 +228,7 @@ function turnState(turn) {
         <button v-for="turn in history" :key="turn.id" type="button" class="card" @click="scrollToTurn(turn)">
           <span class="card-q">{{ turn.question }}</span>
           <span class="card-meta">
-            {{ viewNote(turn.params) }}
+            {{ MODES[turn.params.mode ?? 'tutor'].label }}
             <time class="card-time tabular" :datetime="turn.askedAt.toISOString()">{{ timeFmt.format(turn.askedAt) }}</time>
           </span>
           <span v-if="turnState(turn)" class="card-state">{{ turnState(turn) }}</span>
@@ -276,24 +263,10 @@ function turnState(turn) {
       <div class="control-bar" role="group" aria-label="질문 조건">
         <span v-if="!sideOpen && pickedIds.length" class="picked-note">논문 {{ pickedIds.length }}편에서 찾는 중</span>
         <div class="control">
-          <span class="section-label">모드</span>
-          <ModeChips :model-value="qa.mode" @update:model-value="qa.setMode" />
+          <ResearchToggle :model-value="qa.researchOn" :disabled="qa.busy" @update:model-value="qa.setResearch" />
+          <ModeChips v-if="qa.researchOn" :model-value="qa.mode" @update:model-value="qa.setMode" />
         </div>
         <PriorScopeBar v-if="qa.mode === 'prior'" />
-        <div class="control">
-          <span class="section-label">관점</span>
-          <div class="segmented">
-            <button v-for="(info, key) in VIEWS" :key="key" type="button" :aria-pressed="view === key" :title="info.desc" @click="view = key">
-              {{ info.name }}
-            </button>
-          </div>
-        </div>
-        <div class="control">
-          <span class="section-label">자료</span>
-          <div class="segmented">
-            <button v-for="[key, name] in SOURCES" :key="key" type="button" :aria-pressed="qa.source === key" @click="qa.source = key">{{ name }}</button>
-          </div>
-        </div>
       </div>
 
       <div ref="thread" class="thread" aria-live="polite">

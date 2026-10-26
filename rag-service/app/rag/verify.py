@@ -23,7 +23,7 @@ from app.rag.modes import adopt_block, clean_text, map_safe
 from app.rag.numeric import compare_values, difference
 from app.rag.prompts import (
     VERDICT_KO, VERIFY_DRAFT_PROMPT, VERIFY_DRAFT_USER, VERIFY_EXTRACT_PROMPT, VERIFY_EXTRACT_USER, VERIFY_READ_PROMPT,
-    VERIFY_READ_USER, VIEW_RULES,
+    VERIFY_READ_USER, ANSWER_STYLE,
 )
 from app.rag.schemas import (
     AnswerDraft, Claim, ClaimExtraction, Delta, EvidenceRead, ExtractedClaim, VerifyRequest, VerifyResponse,
@@ -103,7 +103,7 @@ def _read(claim: ExtractedClaim, blocks: list[Block]) -> tuple[EvidenceRead, int
     return llm.generate_structured(VERIFY_READ_PROMPT, user, EvidenceRead, temperature=config_rag.EXTRACT_TEMPERATURE)
 
 
-def _draft(rows: list[Claim], view: str) -> tuple[AnswerDraft, int, int]:
+def _draft(rows: list[Claim]) -> tuple[AnswerDraft, int, int]:
     lines = []
     for row in rows:
         if row.verdict == "own_result":
@@ -120,13 +120,12 @@ def _draft(rows: list[Claim], view: str) -> tuple[AnswerDraft, int, int]:
             f"- [{row.labels[0]}] {VERDICT_KO[row.verdict]} · {row.subject or '대상 미상'} {row.metric or ''} · "
             f"원고 값 {row.claimed_value or '없음'}{found}{delta}{condition}"
         )
-    system = VERIFY_DRAFT_PROMPT.format(view_rules=VIEW_RULES[view])
+    system = VERIFY_DRAFT_PROMPT.format(answer_style=ANSWER_STYLE)
     return llm.generate_structured(system, VERIFY_DRAFT_USER.format(results="\n".join(lines)), AnswerDraft)
 
 
 def run(req: VerifyRequest, user: CurrentUser, usage: dict | None = None) -> VerifyResponse:
     started = time.monotonic()
-    view = req.view or user.view or "dev"
     in_tok = out_tok = 0
     warnings: list[str] = []
     rows: list[Claim] = []
@@ -137,7 +136,7 @@ def run(req: VerifyRequest, user: CurrentUser, usage: dict | None = None) -> Ver
     ids = _scope_ids(req, user.team_id)
     if ids == []:
         # 대조할 논문이 하나도 없으면 원고를 LLM에 보내지 않는다(보낼 이유가 없다)
-        resp = VerifyResponse(warnings=[NOT_FOUND_WARNING], handoff=True, view=view, latency_ms=0)
+        resp = VerifyResponse(warnings=[NOT_FOUND_WARNING], handoff=True, latency_ms=0)
     else:
         extraction, i, o = llm.generate_structured(
             VERIFY_EXTRACT_PROMPT.format(max_claims=config_rag.VERIFY_MAX_CLAIMS), VERIFY_EXTRACT_USER.format(text=req.text), ClaimExtraction,
@@ -151,7 +150,7 @@ def run(req: VerifyRequest, user: CurrentUser, usage: dict | None = None) -> Ver
         stats["claims"] = len(claims)
 
         if not claims:
-            resp = VerifyResponse(warnings=[NO_CLAIMS_WARNING], handoff=True, view=view, latency_ms=0)
+            resp = VerifyResponse(warnings=[NO_CLAIMS_WARNING], handoff=True, latency_ms=0)
         else:
             evidence = [_evidence(user.team_id, c, ids) for c in claims]  # 임베딩을 쓰므로 한 스레드에서 차례로
             jobs = [(c, blocks) for c, blocks in zip(claims, evidence) if blocks]
@@ -199,7 +198,7 @@ def run(req: VerifyRequest, user: CurrentUser, usage: dict | None = None) -> Ver
             citable = [r for r in rows if r.labels]
             if citable:
                 try:
-                    draft, i, o = _draft(citable, view)
+                    draft, i, o = _draft(citable)
                     in_tok, out_tok = in_tok + i, out_tok + o
                     answer = split_label_groups(draft.answer)  # [S1, S2] → [S1] [S2]
                     _, citation_failed = verify_citations(answer, draft.cited, used)
@@ -216,7 +215,7 @@ def run(req: VerifyRequest, user: CurrentUser, usage: dict | None = None) -> Ver
                 warnings.append(NOT_FOUND_WARNING)
             resp = VerifyResponse(
                 claims=rows, draft=draft_text, warnings=warnings, sources=source_strings(used), source_details=details_of(used),
-                needs_review=True, handoff=handoff, view=view, latency_ms=0,
+                needs_review=True, handoff=handoff, latency_ms=0,
             )
 
     if usage is not None:

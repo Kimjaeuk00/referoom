@@ -31,7 +31,7 @@ def test_question_files_cover_every_mode_and_pass_the_count_rules():
     qs = questions()
     assert run_eval.dataset_gaps(qs) == []
     modes = Counter(q["mode"] for q in qs)
-    assert modes["tutor"] == 69 and all(modes[m] >= 3 for m in ("prior", "topic", "verify"))
+    assert modes["tutor"] == 49 and all(modes[m] >= 3 for m in ("prior", "topic", "verify"))
     assert all(q["type"] == q["mode"] for q in qs if q["mode"] != "tutor")
     assert len({q["id"] for q in qs}) == len(qs)
 
@@ -41,7 +41,7 @@ def write(tmp_path, *items):
     return tmp_path
 
 
-TUTOR = {"id": "X1", "type": "general", "question": "질문입니다", "level": "L2", "view": "dev", "expected_answer": "답",
+TUTOR = {"id": "X1", "type": "general", "question": "질문입니다", "level": "L2", "expected_answer": "답",
          "key_points": ["a"], "evidence": {"paper": "P", "pages": [1]}, "should_refuse": False}
 
 
@@ -105,9 +105,9 @@ def test_requests_follow_each_modes_api():
     path, body = mode_checks.build_request(sample("prior", "PR01"), 5)
     assert path == "/rag-query" and body["mode"] == "prior" and body["question"] and "level" not in body and body["top_k"] == 5
     path, body = mode_checks.build_request(sample("topic", "TP03"), 5, [7])
-    assert path == "/topic-suggest" and body == {"paper_ids": [7], "hint": "어댑터와 LoRA를 비교하는 방향", "n": 2, "view": "dev"}
+    assert path == "/topic-suggest" and body == {"paper_ids": [7], "hint": "어댑터와 LoRA를 비교하는 방향", "n": 2}
     path, body = mode_checks.build_request(sample("verify", "VF01"), 5)
-    assert path == "/verify" and set(body) == {"text", "view"} and body["text"].startswith("LoRA")
+    assert path == "/verify" and set(body) == {"text"} and body["text"].startswith("LoRA")
     tutor = sample("tutor")
     path, body = mode_checks.build_request(tutor, 3)
     assert path == "/rag-query" and "mode" not in body and body["level"] == tutor["level"]  # 요청 깊이는 그대로 보낸다
@@ -217,14 +217,14 @@ def fake_server(seen):
         if request.url.path == "/papers":
             return httpx.Response(200, json={"total": 3, "items": LIBRARY})
         if request.url.path == "/topic-suggest":
-            return httpx.Response(200, json={**topic_body(), "view": "dev", "latency_ms": 5})
+            return httpx.Response(200, json={**topic_body(), "latency_ms": 5})
         if request.url.path == "/verify":
             return httpx.Response(200, json={**verify_body(), "latency_ms": 5})
         assert request.url.path == "/rag-query"
         if body.get("mode") == "prior":
-            return httpx.Response(200, json={**prior_body(), "answer": "표", "level": "L2", "view": body["view"], "needs_review": False, "latency_ms": 5})
+            return httpx.Response(200, json={**prior_body(), "answer": "표", "level": "L2", "needs_review": False, "latency_ms": 5})
         return httpx.Response(200, json={"answer": "답", "sources": ["s"], "source_details": [{"title": "T", "page": 1}], "handoff": False,
-                                         "needs_review": False, "level": body["level"], "view": body["view"], "latency_ms": 5})
+                                         "needs_review": False, "level": body["level"], "latency_ms": 5})
     return handler
 
 

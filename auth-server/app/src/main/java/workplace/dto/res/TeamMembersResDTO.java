@@ -5,7 +5,6 @@ import java.util.List;
 import lombok.Builder;
 import lombok.Getter;
 import workplace.enums.Role;
-import workplace.enums.ViewType;
 
 @Getter
 @Builder
@@ -22,6 +21,5 @@ public class TeamMembersResDTO {
         private final String username;
         private final String displayName;
         private final Role role;
-        private final ViewType view;
     }
 }

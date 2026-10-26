@@ -1,6 +1,6 @@
 """검색→답변 파이프라인 (DEV_04 3절).
 
-요청 → 깊이(level)/view 결정 → store.search → MIN_SCORE 필터
+요청 → 깊이(level) 결정 → store.search → MIN_SCORE 필터
   → 0건: 근거 없음(LLM 미호출)
   → 있음: 컨텍스트 → 프롬프트 → LLM 구조화 출력 → 인용 검증 → needs_review → 응답
 """
@@ -10,18 +10,15 @@ import time
 
 from app.rag import config_rag, llm, page_images
 from app.rag.context import LABEL_RE, Block, build_blocks, details_of, render_context, source_strings, split_label_groups, verify_citations
+from app.rag import paper_names
 from app.rag.deps import CurrentUser, store
-from app.rag.prompts import IMAGE_NOTE, LEVEL_RULES, SYSTEM_PROMPT, USER_PROMPT, VIEW_RULES
+from app.rag.prompts import IMAGE_NOTE, LEVEL_RULES, SYSTEM_PROMPT, USER_PROMPT, ANSWER_STYLE
 from app.rag.schemas import RagRequest, RagResponse
 
 logger = logging.getLogger("rag")
 
 # source 요청값 → 스토어 목록 (DEV_03 6절)
-SOURCE_MAP = {
-    "pdf": ["pdf", "annotation"],
-    "web": ["web"],
-    "all": ["pdf", "web", "annotation"],
-}
+ALL_SOURCES = ["pdf", "web", "annotation"]  # 자료 종류는 고르지 않고 항상 전체에서 찾는다
 
 NOT_FOUND_ANSWER = "팀 라이브러리에서 관련 내용을 찾을 수 없습니다."
 WITHHELD_ANSWER = ("표·그림·수식에 있는 값을 원본 페이지에서 확인하지 못해 수치는 답하지 않습니다. "
@@ -31,12 +28,34 @@ _details = details_of  # 예전 이름 (모드 모듈은 context의 공용 이�
 _source_strings = source_strings
 _LABEL_RE = LABEL_RE
 _MATH_RE = re.compile(r"\$|%|\d+\.\d+")
+# 단위가 붙은 수량(780GB, 175B, 10,000배)과 천 단위 쉼표가 있는 큰 수. 정수만 있는 수치 답이 검토 배지를 못 받던 문제를 막는다.
+# "32 배치"의 배, "2 초기화"의 초 같은 일반 단어는 잡지 않으려고 배(?!치)로 두고 시간 단위는 넣지 않았다.
+# 실제 색인으로 답할 수 있는 18문항을 돌려 보니 기존 규칙은 11개, 이 규칙을 더하면 14개가 표시됐다(R08 780GB→48GB 포함).
+_QUANTITY_RE = re.compile(r"\d[\d,]*\s*(?:GB|MB|TB|KB|bit|비트|배(?!치)|B\b|M\b|K\b|×)|\d{1,3}(?:,\d{3})+")
 # 이미지 재시도 조건: 답변에 백분율·소수·수식 기호·두 자리 이상 숫자가 있음
 _VALUE_RE = re.compile(r"\d+(\.\d+)?\s*%|\d+\.\d+|\$|\d{2,}")
 
 
-def _not_found(level: str, view: str) -> RagResponse:
-    return RagResponse(answer=NOT_FOUND_ANSWER, handoff=True, level=level, view=view, latency_ms=0)
+def _with_named_papers(req: RagRequest, team_id: int, hits: list) -> list:
+    """범위가 전체이고 질문이 라이브러리 논문 2편 이상의 이름을 들면, 그 논문마다 따로 검색해 합친다(비교 질문의 근거 쏠림 방지).
+    이름이 든 논문의 문단은 MIN_SCORE보다 낮은 NAMED_PAPER_MIN_SCORE부터 쓴다. 그 밖의 질문은 기존 결과를 그대로 돌려준다."""
+    titles_of = getattr(store, "paper_titles", None)
+    if req.scope.type != "all" or titles_of is None:
+        return hits
+    titles = titles_of(team_id)
+    named = paper_names.detect(req.question, paper_names.aliases_of(titles)) if titles else []
+    if len(named) < 2:
+        return hits
+    per_paper = [
+        [h for h in store.search(team_id, ALL_SOURCES, req.question, k=config_rag.NAMED_PAPER_PER_K, paper_ids=[pid])
+         if h.score >= config_rag.NAMED_PAPER_MIN_SCORE]
+        for pid in named
+    ]
+    return paper_names.merge(hits, per_paper, req.top_k)
+
+
+def _not_found(level: str) -> RagResponse:
+    return RagResponse(answer=NOT_FOUND_ANSWER, handoff=True, level=level, latency_ms=0)
 
 
 def needs_review(answer: str, used: list[Block], citation_failed: bool, top_score: float) -> bool:
@@ -44,6 +63,7 @@ def needs_review(answer: str, used: list[Block], citation_failed: bool, top_scor
     return (
         any(b.has_math for b in used)
         or bool(_MATH_RE.search(answer))
+        or bool(_QUANTITY_RE.search(answer))
         or citation_failed
         or top_score < config_rag.REVIEW_SCORE
         or all(b.type == "annotation" for b in used)
@@ -86,34 +106,34 @@ def _image_retry(system: str, user_msg: str, team_id: int, target: list[Block]):
 
 def run(req: RagRequest, user: CurrentUser, usage: dict | None = None) -> RagResponse:
     if req.mode == "prior":
-        from app.rag import prior  # 지연 import: prior가 이 파일의 SOURCE_MAP·_not_found를 쓰므로 순환을 피한다
+        from app.rag import prior  # 지연 import: prior가 이 파일의 ALL_SOURCES·_not_found를 쓰므로 순환을 피한다
 
         return prior.run(req, user, usage)
     started = time.monotonic()
     # v0.2: 사용자 수준 설정은 없다. level은 '더 쉽게/더 깊게' 요청이 body로 보낼 때만 오고(L1/L3), 없으면 기본 깊이(L2 규칙)다.
     level = req.level or "L2"
-    view = req.view or user.view or "dev"
 
     # team_id는 JWT에서만 읽는다 (요청 본문 값 무시)
     extra = config_rag.MAX_CAPTION_HITS is not None
     hits = store.search(
         user.team_id,
-        SOURCE_MAP[req.source],
+        ALL_SOURCES,
         req.question,
         k=req.top_k + (3 if extra else 0),  # 캡션을 덜어낼 만큼 여유 있게 받는다
         paper_ids=req.scope.ids if req.scope.type == "paper" else None,
         tags=req.scope.tags if req.scope.type == "tag" else None,
     )
-    hits = limit_captions([h for h in hits if h.score >= config_rag.MIN_SCORE], req.top_k, config_rag.MAX_CAPTION_HITS)
+    hits = [h for h in hits if h.score >= config_rag.MIN_SCORE]
+    hits = limit_captions(_with_named_papers(req, user.team_id, hits), req.top_k, config_rag.MAX_CAPTION_HITS)
 
     in_tok = out_tok = 0
     images: list = []
     retry = "none"
     if not hits:
-        resp = _not_found(level, view)
+        resp = _not_found(level)
     else:
         blocks = build_blocks(hits)
-        system = SYSTEM_PROMPT.format(level_rules=LEVEL_RULES[level], view_rules=VIEW_RULES[view])
+        system = SYSTEM_PROMPT.format(level_rules=LEVEL_RULES[level], answer_style=ANSWER_STYLE)
         user_msg = USER_PROMPT.format(context=render_context(blocks), question=req.question)
         draft, in_tok, out_tok = llm.generate(system, user_msg)
 
@@ -144,11 +164,10 @@ def run(req: RagRequest, user: CurrentUser, usage: dict | None = None) -> RagRes
                 source_details=_details(withheld),
                 needs_review=True,
                 level=level,
-                view=view,
                 latency_ms=0,
             )
         elif not draft.found:
-            resp = _not_found(level, view)
+            resp = _not_found(level)
         else:
             answer = split_label_groups(draft.answer)  # [S1, S2] → [S1] [S2] (화면의 근거 칩은 대괄호 하나에 라벨 하나만 알아본다)
             used, failed = verify_citations(answer, draft.cited, blocks)
@@ -160,7 +179,6 @@ def run(req: RagRequest, user: CurrentUser, usage: dict | None = None) -> RagRes
                 # 이미지에서 읽은 값은 텍스트 근거로 대조할 수 없으므로 검수 대상으로 둔다
                 needs_review=needs_review(answer, used, failed, top_score) or bool(images),
                 level=level,
-                view=view,
                 latency_ms=0,
             )
 

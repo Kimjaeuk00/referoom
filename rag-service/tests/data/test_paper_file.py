@@ -15,10 +15,8 @@ PDF = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
 def headers(**overrides) -> dict:
     now = int(time.time())
     claims = {"iss": "simple-auth-server", "sub": "12", "username": "tester", "role": "member", "team_id": TEAM,
-              "team_type": "dev", "view": "rnd", "iat": now, "exp": now + 3600, **overrides}
-    if claims["team_id"] is None and "team_type" not in overrides:
-        claims["team_type"] = None
-    claims = {k: v for k, v in claims.items() if v is not None or k in ("team_id", "team_type")}
+              "iat": now, "exp": now + 3600, **overrides}
+    claims = {k: v for k, v in claims.items() if v is not None or k == "team_id"}
     return {"Authorization": "Bearer " + jwt.encode(claims, "test-secret-0123456789-abcdefghijklmnop", algorithm="HS256")}
 
 

@@ -8,7 +8,6 @@ import workplace.dto.res.TeamResDTO;
 import workplace.dto.res.UserResDTO;
 import workplace.entity.Team;
 import workplace.entity.User;
-import workplace.enums.TeamType;
 
 public final class TeamConverter {
 
@@ -17,12 +16,10 @@ public final class TeamConverter {
 
     public static Team toTeam(
         String name,
-        TeamType teamType,
         String inviteCode
     ) {
         return Team.builder()
             .name(name)
-            .teamType(teamType)
             .inviteCode(inviteCode)
             .build();
     }
@@ -35,7 +32,6 @@ public final class TeamConverter {
         return UserResDTO.TeamInfo.builder()
             .id(team.getId())
             .name(team.getName())
-            .type(team.getTeamType())
             .build();
     }
 
@@ -48,7 +44,6 @@ public final class TeamConverter {
             TeamResDTO.TeamInfo.builder()
                 .id(team.getId())
                 .name(team.getName())
-                .type(team.getTeamType())
                 .memberCount(memberCount)
                 .inviteCode(inviteCode)
                 .build();
@@ -79,7 +74,6 @@ public final class TeamConverter {
             .username(user.getUsername())
             .displayName(user.getDisplayName())
             .role(user.getRole())
-            .view(user.getEffectiveView())
             .build();
     }
 

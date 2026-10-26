@@ -45,6 +45,11 @@ def paper_chunk_counts(team_id: int) -> dict[int, int]:
     return {41: 1}
 
 
+def paper_titles(team_id: int) -> dict[int, str]:
+    """논문 id → 제목. 스텁은 비어 있어 이름 기반 검색이 꺼진다."""
+    return {}
+
+
 def index_version(team_id: int) -> int:
     return 0
 

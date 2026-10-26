@@ -11,7 +11,7 @@ sys.path.insert(0, str(EVAL))
 
 import stability  # noqa: E402
 
-ITEM = {"id": "VF01", "mode": "verify", "type": "verify", "question": "LoRA는 175B에서 매개변수를 10,000배 줄인다고 보고되었다.", "view": "dev",
+ITEM = {"id": "VF01", "mode": "verify", "type": "verify", "question": "LoRA는 175B에서 매개변수를 10,000배 줄인다고 보고되었다.",
         "expected_claims": [{"contains": "LoRA", "verdicts": ["match"]}], "should_refuse": False}
 
 
