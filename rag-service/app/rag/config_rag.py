@@ -49,7 +49,10 @@ LLM_IMAGE_MODEL = os.getenv("LLM_IMAGE_MODEL") or LLM_MODEL
 LLM_IMAGE_REASONING_EFFORT = os.getenv("LLM_IMAGE_REASONING_EFFORT") or LLM_REASONING_EFFORT
 
 # 질문 시 페이지 이미지 투입 (실험): 표·그림·수식 표시가 붙은 근거 페이지를 이미지로 LLM에 함께 넣는다
-PAGE_IMAGES = os.getenv("PAGE_IMAGES", "off") == "on"
+# 기본 켬(2026-10-26). 질문 전체가 아니라 '답에 수치가 있고 인용한 문단에 수식·표·캡션이 섞였을 때만' 해당 쪽(최대 PAGE_IMAGE_MAX)을 이미지로 한 번 더 읽는다.
+# 표 값 질문 5회: 끔 0/5, 켬 5/5. 대신 답할 수 있는 32문항 중 15개(47%)에서 재시도가 일어나 평균 입력 토큰이 1,802 → 3,135(+74%)였다. 거절한 답은 재시도하지 않는다.
+# 끄려면 PAGE_IMAGES=off.
+PAGE_IMAGES = os.getenv("PAGE_IMAGES", "on") == "on"
 PAGE_IMAGES_ON_REFUSAL = os.getenv("PAGE_IMAGES_ON_REFUSAL", "off") == "on"  # 실험: 텍스트가 거절해도 이미지로 재시도
 # 검색 상위 k개 안의 캡션 청크 최대 개수 (비우면 제한 없음). 캡션이 본문 청크 자리를 차지하는 것을 막는다
 MAX_CAPTION_HITS = int(os.getenv("MAX_CAPTION_HITS")) if os.getenv("MAX_CAPTION_HITS") else None
