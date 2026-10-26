@@ -28,7 +28,7 @@ const QUICK = [
   'LoRA는 왜 파라미터를 적게 학습해도 되나요?',
   '어텐션에서 √d_k로 나누는 이유는?',
   'QLoRA는 LoRA와 무엇이 다른가요?',
-  'RAG는 언제 쓰면 좋은가요?',
+  'PEFT 기법에는 어떤 방법들이 있고, 각각 어떻게 다른가요?',
 ]
 const timeFmt = new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' })
 
@@ -327,7 +327,7 @@ function turnState(turn) {
             id="question"
             v-model="question"
             class="composer-input"
-            :rows="qa.mode === 'verify' ? 6 : 2"
+            rows="2"
             :maxlength="max"
             :placeholder="qa.mode === 'tutor' ? '논문에 대해 궁금한 점을 적어 주세요. Enter로 보내고 Shift+Enter로 줄을 바꿔요.' : `${spec.placeholder}. Enter로 보내고 Shift+Enter로 줄을 바꿔요.`"
             :aria-describedby="reasonText ? 'composer-reason' : undefined"
@@ -347,8 +347,11 @@ function turnState(turn) {
             </button>
           </div>
         </div>
-        <p v-if="modeHint" class="hint mode-note">{{ modeHint }}</p>
-        <p v-if="reasonText" id="composer-reason" class="hint mode-note" role="status">{{ reasonText }}</p>
+        <!-- 주제 모드는 안내와 사유가 두 줄이라, 다른 모드도 두 줄 높이를 잡아 입력창 아래 단차를 없앤다 -->
+        <div class="mode-notes">
+          <p v-if="modeHint" class="hint mode-note">{{ modeHint }}</p>
+          <p v-if="reasonText" id="composer-reason" class="hint mode-note" role="status">{{ reasonText }}</p>
+        </div>
       </form>
     </section>
 
@@ -718,6 +721,10 @@ function turnState(turn) {
 .composer-box:focus-within {
   border-color: var(--c-accent-2);
   box-shadow: 0 0 0 1px var(--c-accent-2);
+}
+
+.mode-notes {
+  min-height: calc(2 * (1.5 * var(--fs-xs) + 6px));
 }
 
 .mode-note {

@@ -267,10 +267,38 @@ async function collect() {
   color: var(--c-ink-muted);
 }
 
+/* 기본 meter는 다크 테마에서 트랙이 배경에 묻히고 낮은 점수의 채움이 안 보여서 직접 그린다 */
 meter {
   width: 72px;
-  height: 6px;
+  height: 8px;
+  appearance: none;
+  background: var(--c-rule-strong);
+  border-radius: 4px;
+  overflow: hidden;
 }
+
+meter::-webkit-meter-bar {
+  background: var(--c-rule-strong);
+  border: 0;
+  border-radius: 4px;
+  height: 8px;
+}
+
+meter::-webkit-meter-optimum-value,
+meter::-webkit-meter-suboptimum-value,
+meter::-webkit-meter-even-less-good-value {
+  border-radius: 4px;
+  min-width: 4px;
+}
+
+meter::-webkit-meter-optimum-value { background: var(--c-ok); }
+meter::-webkit-meter-suboptimum-value { background: var(--c-accent); }
+meter::-webkit-meter-even-less-good-value { background: var(--c-review); }
+
+meter::-moz-meter-bar { background: var(--c-accent); border-radius: 4px; }
+meter:-moz-meter-optimum::-moz-meter-bar { background: var(--c-ok); }
+meter:-moz-meter-sub-optimum::-moz-meter-bar { background: var(--c-accent); }
+meter:-moz-meter-sub-sub-optimum::-moz-meter-bar { background: var(--c-review); }
 
 .warn {
   color: var(--c-review);
