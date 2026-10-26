@@ -115,6 +115,15 @@ bash scripts/dev.sh up auth rag voice frontend
 bash scripts/dev.sh status
 ```
 
+FFmpeg는 음성 녹음(webm)을 변환할 때 쓰며, 없으면 `/stt`가 503 `NOT_READY`("음성 인식 서비스를 준비 중입니다")로 실패합니다. 설치 후에는 음성 서버를 재시작하세요(`bash scripts/dev.sh restart voice`). 마이크는 `localhost` 또는 `https` 주소에서만 동작합니다.
+
+```bash
+brew install ffmpeg                # macOS
+winget install Gyan.FFmpeg         # Windows (설치 후 터미널을 다시 열기)
+ffmpeg -version                    # 설치 확인
+curl localhost:8008/health         # {"whisper":"ready"}면 정상
+```
+
 ## 팀원별 기여
 
 | 팀원 | 담당 영역 | 주요 기여 |
