@@ -6,7 +6,6 @@ import { errorText } from '@/api/errors'
 import { renderMarkdown } from '@/lib/markdown'
 import { formatDate, PAPER_STATUS, safeUrl, SOURCE_TYPE, toneOfTag } from '@/lib/format'
 import StatusBanner from '@/components/common/StatusBanner.vue'
-import ReviewBadge from '@/components/qa/ReviewBadge.vue'
 import { usePdfOpener } from '@/composables/usePdfOpener'
 
 const route = useRoute()
@@ -94,16 +93,17 @@ async function summarize() {
           <div class="links">
             <RouterLink class="btn btn-primary" :to="{ name: 'ask', query: { paper: paper.id, title: paper.title } }">이 논문에 질문하기</RouterLink>
             <RouterLink class="btn" :to="{ name: 'ask', query: { paper: paper.id, title: paper.title, mode: 'topic' } }">이 논문으로 주제 찾기</RouterLink>
-            <button v-if="paper.status === 'indexed'" type="button" class="btn" :disabled="pdf.opening.value.has('paper')" @click="pdf.open('paper', paper.id, page)">
-              {{ pdf.opening.value.has('paper') ? '여는 중…' : page ? `원문 PDF ${page}쪽 열기` : '원문 PDF 열기' }}
-            </button>
-            <a v-if="safeUrl(paper.url)" class="btn" :href="safeUrl(paper.url)" target="_blank" rel="noopener noreferrer">원문 열기</a>
+            <a v-if="safeUrl(paper.url)" class="btn" :href="safeUrl(paper.url)" target="_blank" rel="noopener noreferrer">원문 PDF 열기</a>
           </div>
         </header>
 
         <p v-if="page" class="page-note">
           답변의 근거는 이 논문의 <strong>{{ page }}쪽</strong>이에요.
-          <template v-if="paper.status === 'indexed'">위의 '원문 PDF {{ page }}쪽 열기'로 해당 쪽을 바로 볼 수 있어요.</template>
+          <template v-if="paper.status === 'indexed'">
+            <button type="button" class="link-btn" :disabled="pdf.opening.value.has('paper')" @click="pdf.open('paper', paper.id, page)">
+              {{ pdf.opening.value.has('paper') ? '여는 중…' : `원문 PDF ${page}쪽 열기` }}
+            </button>로 해당 쪽을 바로 볼 수 있어요.
+          </template>
           <template v-else-if="safeUrl(paper.url)">원문을 열어 해당 쪽을 확인하세요.</template>
           <template v-else>원문 PDF에서 해당 쪽을 확인하세요.</template>
         </p>
@@ -137,7 +137,7 @@ async function summarize() {
                 {{ k.name }} <span class="tabular">{{ kindCount(k.id) }}</span>
               </button>
             </div>
-            <ReviewBadge v-if="summary.needs_review" />
+            <p v-if="summary.needs_review" class="review-hint">수치·수식은 원문과 한 번 확인해 보세요.</p>
 
             <section
               v-for="s in summary.sections"
@@ -157,7 +157,15 @@ async function summarize() {
                       <template v-if="src.page">{{ src.page }}쪽에서 가져온 내용이에요.</template>
                       원문에서 앞뒤 맥락을 확인하세요.
                     </p>
-                    <a v-if="safeUrl(paper.url)" :href="safeUrl(paper.url)" target="_blank" rel="noopener noreferrer">원문 열기</a>
+                    <!-- 팀이 보관한 PDF를 그 쪽에서 연다. 색인 전이라 PDF가 없으면 외부 원문 링크로 대신한다 -->
+                    <button
+                      v-if="paper.status === 'indexed'"
+                      type="button"
+                      class="link-btn"
+                      :disabled="pdf.opening.value.has(`${s.key}-${src.page}`)"
+                      @click="pdf.open(`${s.key}-${src.page}`, paper.id, src.page)"
+                    >{{ pdf.opening.value.has(`${s.key}-${src.page}`) ? '여는 중…' : src.page ? `원문 ${src.page}쪽 보기` : '원문 보기' }}</button>
+                    <a v-else-if="safeUrl(paper.url)" :href="safeUrl(paper.url)" target="_blank" rel="noopener noreferrer">원문 열기</a>
                   </div>
                 </details>
               </div>
@@ -361,6 +369,28 @@ h2 {
   padding-left: 1.3em;
 }
 
+.link-btn {
+  justify-self: start; /* 카드(grid) 안에서 글과 같이 왼쪽 */
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link-btn:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.review-hint {
+  margin: 10px 0 0;
+  color: var(--c-ink-muted);
+  font-size: var(--fs-xs);
+}
+
 /* 근거 카드: 누르면 그 자리에 펼쳐진다 */
 .cites {
   margin-top: 10px;
@@ -371,13 +401,20 @@ h2 {
 
 .cite-card summary {
   display: inline-block;
-  padding: 0 6px;
-  border-radius: 2px;
-  background: linear-gradient(transparent 18%, var(--c-marker) 18%, var(--c-marker) 86%, transparent 86%);
+  padding: 2px 10px;
+  border: 1px solid var(--c-rule-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-ink);
   font-size: var(--fs-xs);
   font-weight: 600;
   list-style: none;
   cursor: pointer;
+}
+
+.cite-card summary:hover,
+.cite-card[open] summary {
+  background: var(--c-surface);
 }
 
 .cite-card summary::-webkit-details-marker {
